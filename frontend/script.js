@@ -34,6 +34,8 @@ const anomBtn = document.getElementById('anomBtn');
 const anomError = document.getElementById('anomError');
 const anomList = document.getElementById('anomList');
 const anomScatter = document.getElementById('anomScatter');
+const riskChartEl = document.getElementById('riskChart');
+const compChartEl = document.getElementById('compChart');
 
 let players = [];
 let playerMap = new Map();
@@ -54,14 +56,17 @@ async function runSingleAnalysis(id) {
   heroBVal.textContent = 'OVR —';
   heroDelta.textContent = '—';
   heroDeltaLabel.textContent = 'Single player view';
-  heroCardA.classList.remove('winner','loser');
-  heroCardB.classList.remove('winner','loser');
+  heroCardA.classList.remove('winner', 'loser');
+  heroCardB.classList.remove('winner', 'loser');
   reasoningEl.textContent = 'Add another player to see deltas and SHAP drivers.';
   renderInsightPills([]);
   renderDriversChart([], 0);
   renderRadar([], p.name, '');
   renderWhatIfControls([], null, null, null);
   fetchQuantiles(p.id);
+  renderComposition([], p.name);
+  renderRiskProfile(null); // Clear or showing loading
+  extraComparisons.innerHTML = '';
   extraComparisons.innerHTML = '';
   // update previews
   const pa = playerMap.get(String(id));
@@ -82,8 +87,8 @@ async function runMultiAnalysis(ids) {
   heroDelta.textContent = `${delta >= 0 ? '+' : ''}${delta.toFixed(2)}`;
   heroDelta.style.color = delta >= 0 ? cssVar('--positive') : cssVar('--negative');
   heroDeltaLabel.textContent = delta >= 0 ? 'Anchor leads' : 'Target leads';
-  heroCardA.classList.remove('winner','loser');
-  heroCardB.classList.remove('winner','loser');
+  heroCardA.classList.remove('winner', 'loser');
+  heroCardB.classList.remove('winner', 'loser');
   if (delta > 0.05) { heroCardA.classList.add('winner'); heroCardB.classList.add('loser'); }
   else if (delta < -0.05) { heroCardB.classList.add('winner'); heroCardA.classList.add('loser'); }
   reasoningEl.textContent = data.natural_language_summary;
@@ -97,6 +102,7 @@ async function runMultiAnalysis(ids) {
   renderRadar(data.top_reasons, data.player_a.name, data.player_b.name);
   renderWhatIfControls(data.top_reasons, data.player_b.id || target, data.player_b.predicted_ovr, data.player_a.predicted_ovr);
   fetchQuantiles(data.player_b.id || target);
+  renderComposition(data.top_reasons, data.player_a.name);
 
   // extra comparisons for 3rd/4th against anchor
   extraComparisons.innerHTML = '';
@@ -112,7 +118,7 @@ async function runMultiAnalysis(ids) {
       const gap = sub.ovr_difference;
       card.innerHTML = `
         <div style="font-weight:700;">${sub.player_b.name}</div>
-        <div class="muted" style="font-size:12px;">Δ vs anchor: ${gap >=0 ? '+' : ''}${gap.toFixed(2)}</div>
+        <div class="muted" style="font-size:12px;">Δ vs anchor: ${gap >= 0 ? '+' : ''}${gap.toFixed(2)}</div>
         <div class="chip-group" style="margin-top:6px; display:flex; gap:6px;">
           <span class="pill">OVR ${sub.player_b.predicted_ovr.toFixed(2)}</span>
           <span class="pill">Pos ${sub.player_b.position || '—'}</span>
@@ -148,7 +154,7 @@ function renderPlayerList(list) {
     const card = document.createElement('div');
     card.className = `player-option ${isSelected ? 'selected' : ''}`;
     if (disabled) card.style.opacity = '0.5';
-    
+
     card.onclick = () => {
       if (disabled) return;
       toggleSelect(p.ID);
@@ -219,7 +225,7 @@ function renderPreview() {
   const pa = playerMap.get(selectedIds[0]);
   const pb = playerMap.get(selectedIds[1]);
   const setCard = (elImg, nameEl, valEl, p) => {
-    if (!p) { elImg.src = ''; elImg.alt=''; nameEl.textContent='—'; valEl.textContent='OVR —'; return; }
+    if (!p) { elImg.src = ''; elImg.alt = ''; nameEl.textContent = '—'; valEl.textContent = 'OVR —'; return; }
     elImg.src = p.card || '';
     elImg.alt = p.Name;
     nameEl.textContent = p.Name;
@@ -259,7 +265,7 @@ function renderInsightPills(topReasons) {
     insightPills.innerHTML = '<span class="muted">No drivers yet.</span>';
     return;
   }
-  const sorted = [...topReasons].filter(r => !isNaN(r.impact)).sort((a,b) => Math.abs(b.impact) - Math.abs(a.impact)).slice(0,6);
+  const sorted = [...topReasons].filter(r => !isNaN(r.impact)).sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact)).slice(0, 6);
   sorted.forEach(r => {
     const pill = document.createElement('span');
     const pos = r.impact >= 0;
@@ -272,33 +278,43 @@ function renderInsightPills(topReasons) {
 
 function renderDriversChart(topReasons, delta) {
   if (!driversChartEl || !window.echarts) return;
+  const chart = echarts.init(driversChartEl);
+
   if (!topReasons || !topReasons.length) {
-    driversChartEl.innerHTML = '<div class="muted">Run a comparison to see drivers.</div>';
+    chart.clear();
     return;
   }
-  const chart = echarts.init(driversChartEl);
-  const features = topReasons.slice(0,10);
+
+  const features = topReasons.slice(0, 10);
   const names = features.map(r => r.feature);
   const impacts = features.map(r => Number(r.impact) || 0);
   const statsDelta = features.map(r => r.stat_delta);
+
   chart.setOption({
+    animationDuration: 1000,
+    animationEasing: 'cubicOut',
     textStyle: { fontFamily: 'Inter' },
     backgroundColor: 'transparent',
-    grid: { left: 90, right: 50, top: 20, bottom: 30 },
+    grid: { left: 10, right: 40, top: 10, bottom: 20, containLabel: true },
     xAxis: {
       type: 'value',
-      axisLabel: { color: cssVar('--text-secondary') },
-      splitLine: { lineStyle: { color: cssVar('--panel-border') } }
+      axisLabel: { color: cssVar('--text-secondary'), fontSize: 11 },
+      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } },
+      axisLine: { show: false },
+      axisTick: { show: false }
     },
     yAxis: {
-        type: 'category',
-        data: names,
-        axisLabel: { color: cssVar('--text-primary') },
+      type: 'category',
+      data: names,
+      axisLabel: { color: cssVar('--text-primary'), fontWeight: 600, fontSize: 12 },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      inverse: true
     },
     tooltip: {
       trigger: 'axis',
-      backgroundColor: 'rgba(20,20,20,0.9)',
-      borderColor: '#333',
+      backgroundColor: 'rgba(20,20,20,0.95)',
+      borderColor: cssVar('--panel-border'),
       textStyle: { color: '#fff' },
       formatter: (params) => {
         const p = params[0];
@@ -307,58 +323,79 @@ function renderDriversChart(topReasons, delta) {
         const pct = (features[idx].percent_of_delta !== undefined && !isNaN(features[idx].percent_of_delta))
           ? `${features[idx].percent_of_delta.toFixed(0)}%`
           : '—';
-        return `${p.name}<br/>Impact: ${p.value.toFixed(3)}<br/>Stat Δ: ${stat ?? '—'}<br/>% of Δ: ${pct}`;
+        return `
+          <div style="font-weight:700; margin-bottom:4px;">${p.name}</div>
+          <div style="font-size:12px; color:#a1a1aa;">
+            Impact: <span style="color:${p.value > 0 ? cssVar('--positive') : cssVar('--negative')}">${p.value > 0 ? '+' : ''}${p.value.toFixed(3)}</span><br/>
+            Stat Delta: <span style="color:#fff;">${stat ?? '—'}</span><br/>
+            Contrib: <span style="color:#fff;">${pct}</span>
+          </div>`;
       }
     },
     series: [{
       type: 'bar',
       data: impacts.map(v => ({
         value: v,
-        itemStyle: { color: v >= 0 ? cssVar('--positive') : cssVar('--negative') }
+        itemStyle: {
+          color: v >= 0
+            ? new echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: 'rgba(34, 211, 238, 0.6)' }, { offset: 1, color: 'rgba(34, 211, 238, 1)' }])
+            : new echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: 'rgba(251, 113, 133, 0.6)' }, { offset: 1, color: 'rgba(251, 113, 133, 1)' }]),
+          shadowBlur: 10,
+          shadowColor: v >= 0 ? 'rgba(34, 211, 238, 0.3)' : 'rgba(251, 113, 133, 0.3)'
+        }
       })),
-      label: { show: true, position: v => v.value >=0 ? 'right' : 'left', formatter: ({value}) => value.toFixed(2), color: cssVar('--text-primary') },
-      barWidth: 14,
-      itemStyle: { borderRadius: [0, 4, 4, 0] }
+      label: {
+        show: true,
+        position: v => v.value >= 0 ? 'right' : 'left',
+        formatter: ({ value }) => value.toFixed(2),
+        color: cssVar('--text-primary'),
+        fontWeight: 600,
+        distance: 10
+      },
+      barWidth: 16,
+      itemStyle: { borderRadius: 4 },
+      showBackground: true,
+      backgroundStyle: { color: 'rgba(255,255,255,0.02)', borderRadius: 4 }
     }]
   });
   window.addEventListener('resize', () => chart.resize());
 }
 
 async function fetchSimilar() {
-    similarError.textContent = '';
-    similarGrid.innerHTML = '';
-    const a = selectedIds[0];
-    if (!a) {
-      similarError.textContent = 'Pick an anchor player first.';
-      return;
-    }
-    similarBtn.disabled = true;
-    similarBtn.textContent = 'Searching...';
-    try {
-      const data = await fetchJson(`/api/similar?player_id=${a}&k=6`);
-      lastSimilar = data.results || [];
-      lastPlayerA = playerMap.get(a);
-      (data.results || []).forEach(r => {
-        const card = document.createElement('div');
-        card.style.border = `1px solid ${cssVar('--panel-border')}`;
-        card.style.background = 'rgba(255,255,255,0.03)';
-        card.style.borderRadius = '12px';
-        card.style.padding = '10px';
-        card.style.display = 'flex';
-        card.style.gap = '12px';
-        card.style.alignItems = 'center';
+  similarError.textContent = '';
+  similarGrid.innerHTML = '';
+  const a = selectedIds[0];
+  if (!a) {
+    similarError.textContent = 'Pick an anchor player first.';
+    return;
+  }
+  similarBtn.disabled = true;
+  similarBtn.textContent = 'Searching...';
+  try {
+    const data = await fetchJson(`/api/similar?player_id=${a}&k=6`);
+    lastSimilar = data.results || [];
+    lastPlayerA = playerMap.get(a);
+    (data.results || []).forEach(r => {
+      const card = document.createElement('div');
+      card.style.border = `1px solid ${cssVar('--panel-border')}`;
+      card.style.background = 'rgba(255,255,255,0.03)';
+      card.style.borderRadius = '12px';
+      card.style.padding = '10px';
+      card.style.display = 'flex';
+      card.style.gap = '12px';
+      card.style.alignItems = 'center';
 
-        const img = document.createElement('img');
-        img.src = r.card || '';
-        img.alt = r.name || '';
-        img.style.width = '64px';
-        img.style.height = '88px';
-        img.style.objectFit = 'contain';
-        img.style.borderRadius = '4px';
-        img.referrerPolicy = 'no-referrer';
+      const img = document.createElement('img');
+      img.src = r.card || '';
+      img.alt = r.name || '';
+      img.style.width = '64px';
+      img.style.height = '88px';
+      img.style.objectFit = 'contain';
+      img.style.borderRadius = '4px';
+      img.referrerPolicy = 'no-referrer';
 
-        const info = document.createElement('div');
-        info.innerHTML = `
+      const info = document.createElement('div');
+      info.innerHTML = `
           <div style="font-weight:700; color:var(--text-primary)">${r.name || 'Unknown'}</div>
           <div class="muted small">${r.team || ''} • ${r.league || ''}</div>
           <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;">
@@ -368,20 +405,20 @@ async function fetchSimilar() {
           </div>
         `;
 
-        card.appendChild(img);
-        card.appendChild(info);
-        similarGrid.appendChild(card);
-      });
-      if (!similarGrid.children.length) {
-        similarError.textContent = 'No similar players found.';
-      }
-      renderNetwork(lastSimilar, lastPlayerA);
-    } catch (err) {
-      similarError.textContent = err.message;
-    } finally {
-      similarBtn.disabled = false;
-      similarBtn.textContent = 'Find Similars';
+      card.appendChild(img);
+      card.appendChild(info);
+      similarGrid.appendChild(card);
+    });
+    if (!similarGrid.children.length) {
+      similarError.textContent = 'No similar players found.';
     }
+    renderNetwork(lastSimilar, lastPlayerA);
+  } catch (err) {
+    similarError.textContent = err.message;
+  } finally {
+    similarBtn.disabled = false;
+    similarBtn.textContent = 'Find Similars';
+  }
 }
 
 async function fetchAnomalies() {
@@ -407,7 +444,7 @@ async function fetchAnomalies() {
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;">
           <span class="pill">OVR ${r.ovr && r.ovr.toFixed ? r.ovr.toFixed(1) : r.ovr}</span>
           <span class="pill">Pred ${r.predicted && r.predicted.toFixed ? r.predicted.toFixed(1) : r.predicted}</span>
-          <span class="pill ${r.residual >=0 ? 'positive' : 'negative'}">Res ${r.residual >=0 ? '+' : ''}${r.residual && r.residual.toFixed ? r.residual.toFixed(2) : r.residual}</span>
+          <span class="pill ${r.residual >= 0 ? 'positive' : 'negative'}">Res ${r.residual >= 0 ? '+' : ''}${r.residual && r.residual.toFixed ? r.residual.toFixed(2) : r.residual}</span>
         </div>
       `;
       anomList.appendChild(div);
@@ -423,34 +460,105 @@ async function fetchAnomalies() {
 
 function renderAnomalyScatter(data) {
   if (!anomScatter || !window.echarts) return;
+  const chart = echarts.init(anomScatter);
+
   if (!data || !data.length) {
-    anomScatter.innerHTML = '<div class="muted">No data</div>';
+    chart.clear();
+    anomScatter.innerHTML = '<div class="muted" style="height:100%; display:flex; align-items:center; justify-content:center;">No data available.</div>';
     return;
   }
-  const chart = echarts.init(anomScatter);
+
+  const formattedData = data.map(d => ({
+    value: [d.predicted, d.ovr],
+    name: d.name,
+    residual: d.residual || (d.ovr - d.predicted),
+    ...d
+  }));
+
+  const minVal = Math.min(...formattedData.map(d => Math.min(d.value[0], d.value[1]))) - 2;
+  const maxVal = Math.max(...formattedData.map(d => Math.max(d.value[0], d.value[1]))) + 2;
+
   chart.setOption({
+    animationDuration: 1000,
     textStyle: { fontFamily: 'Inter' },
     backgroundColor: 'transparent',
+    grid: { left: 40, right: 30, top: 20, bottom: 40 },
     tooltip: {
-        trigger: 'item',
-        backgroundColor: 'rgba(20,20,20,0.9)',
-        borderColor: '#333',
-        textStyle: { color: '#fff' }
+      trigger: 'item',
+      backgroundColor: 'rgba(20,20,20,0.95)',
+      borderColor: '#333',
+      textStyle: { color: '#fff' },
+      formatter: (p) => {
+        const d = p.data;
+        const res = d.residual;
+        return `
+             <div style="font-weight:700; margin-bottom:4px;">${d.name}</div>
+             <div class="small" style="color:#cbd5e1;">Predicted: <b style="color:#fff">${d.value[0].toFixed(1)}</b></div>
+             <div class="small" style="color:#cbd5e1;">Actual: <b style="color:#fff">${d.value[1].toFixed(1)}</b></div>
+             <div class="small" style="margin-top:4px; color:${res >= 0 ? cssVar('--positive') : cssVar('--negative')}">
+                Residual: ${res > 0 ? '+' : ''}${res.toFixed(2)}
+             </div>
+            `;
+      }
     },
-    xAxis: { name: 'Predicted', axisLabel: { color: cssVar('--text-secondary') }, splitLine: { lineStyle: { color: cssVar('--panel-border') } } },
-    yAxis: { name: 'Actual OVR', axisLabel: { color: cssVar('--text-secondary') }, splitLine: { lineStyle: { color: cssVar('--panel-border') } } },
+    xAxis: {
+      name: 'Predicted OVR',
+      nameLocation: 'middle',
+      nameGap: 24,
+      min: minVal,
+      max: maxVal,
+      axisLabel: { color: cssVar('--text-secondary') },
+      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } },
+      axisLine: { lineStyle: { color: '#52525b' } }
+    },
+    yAxis: {
+      name: 'Actual OVR',
+      nameLocation: 'middle',
+      nameGap: 24,
+      min: minVal,
+      max: maxVal,
+      axisLabel: { color: cssVar('--text-secondary') },
+      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } },
+      axisLine: { lineStyle: { color: '#52525b' } }
+    },
     series: [
       {
+        type: 'line',
+        data: [[minVal, minVal], [maxVal, maxVal]],
+        showSymbol: false,
+        lineStyle: { width: 1, type: 'dashed', color: 'rgba(255,255,255,0.3)' },
+        silent: true,
+        z: 1
+      },
+      {
         type: 'scatter',
-        data: data.map(d => [d.predicted, d.ovr, d.name]),
-        itemStyle: { color: cssVar('--accent-cyan') },
-        emphasis: { focus: 'series' },
+        data: formattedData,
         symbolSize: 12,
-        encode: { x: 0, y: 1 },
-        label: { show: false },
+        itemStyle: {
+          color: (params) => {
+            const r = params.data.residual;
+            // Strong Red for < -2, Neutral for 0, Strong Green for > 2
+            if (r > 1) return '#34d399'; // Green
+            if (r < -1) return '#f43f5e'; // Red
+            return '#94a3b8'; // Slate/Gray
+          },
+          shadowBlur: 8,
+          shadowColor: 'rgba(0,0,0,0.4)',
+          borderColor: 'rgba(255,255,255,0.2)',
+          borderWidth: 1
+        },
+        emphasis: {
+          focus: 'self',
+          scale: true,
+          itemStyle: {
+            shadowBlur: 20,
+            borderColor: '#fff',
+            borderWidth: 2
+          }
+        },
+        z: 2
       },
     ],
-    grid: { left: 50, right: 30, top: 20, bottom: 40 },
   });
   window.addEventListener('resize', () => chart.resize());
 }
@@ -485,29 +593,29 @@ function renderWhatIfControls(topReasons, playerBId, basePredB, basePredA) {
     block.style.border = `1px solid ${cssVar('--panel-border')}`;
     block.style.borderRadius = '8px';
     block.style.padding = '12px';
-    
+
     const label = document.createElement('div');
     label.style.fontWeight = '700';
     label.style.fontSize = '13px';
     label.style.display = 'flex';
     label.style.justifyContent = 'space-between';
-    
+
     const labelText = document.createElement('span');
     labelText.textContent = r.feature;
     const valSpan = document.createElement('span');
     valSpan.className = 'muted';
     valSpan.textContent = r.value_b;
-    
+
     label.appendChild(labelText);
     label.appendChild(valSpan);
-    
+
     const input = document.createElement('input');
     input.type = 'range';
     input.min = Math.max(0, Number(r.value_b) - 15);
     input.max = Math.min(99, Number(r.value_b) + 15);
     input.step = 1;
     input.value = Number(r.value_b);
-    
+
     input.oninput = () => {
       valSpan.textContent = input.value;
       state[r.feature] = Number(input.value);
@@ -535,7 +643,7 @@ function updateWhatIfResults(adjOVR, newDelta) {
   if (!el) return;
   el.innerHTML = `
     <div style="font-weight:700; font-size: 1.1em; color: var(--accent-cyan);">Adjusted Player B OVR: ${adjOVR.toFixed(2)}</div>
-    <div class="muted">New gap (A - B): ${newDelta >=0 ? '+' : ''}${newDelta.toFixed(2)}</div>
+    <div class="muted">New gap (A - B): ${newDelta >= 0 ? '+' : ''}${newDelta.toFixed(2)}</div>
   `;
 }
 
@@ -581,10 +689,10 @@ async function fetchQuantiles(playerId) {
     const lower = p50 - p10;
     const skewLabel =
       upper > lower * 1.2 ? 'Upside skew' :
-      lower > upper * 1.2 ? 'Downside skew' : 'Balanced spread';
+        lower > upper * 1.2 ? 'Downside skew' : 'Balanced spread';
     const variability =
       spread < 4 ? 'Tight range (stable)' :
-      spread < 8 ? 'Moderate variability' : 'High volatility';
+        spread < 8 ? 'Moderate variability' : 'High volatility';
     const pos = (v) => {
       const denom = spread || 1e-6;
       const pct = ((v - p10) / denom) * 100;
@@ -617,18 +725,175 @@ async function fetchQuantiles(playerId) {
         </div>
       </div>
     `;
+    const riskChartEl = document.getElementById('riskChart');
+    if (riskChartEl) riskChartEl.style.opacity = '1';
+    renderRiskProfile(data);
   } catch (err) {
-    if(panel) panel.textContent = err.message;
+    if (panel) panel.textContent = err.message;
+    // Fail silently or show text for riskChartEl
   }
+}
+
+function renderRiskProfile(data) {
+  const riskChartEl = document.getElementById('riskChart');
+  if (!riskChartEl || !window.echarts) return;
+  const chart = echarts.init(riskChartEl);
+  if (!data) {
+    chart.clear();
+    riskChartEl.innerHTML = '<div class="muted" style="height:100%; display:flex; align-items:center; justify-content:center;">Run analysis to see risk profile.</div>';
+    return;
+  }
+
+  const p10 = data.p10;
+  const p50 = data.p50;
+  const p90 = data.p90;
+
+  // Generate Bell Curve Data (Normal Distribution approximation)
+  const mean = p50;
+  const stdDev = (p90 - p10) / 3.29; // Approx for 90% CI
+  const minX = mean - 4 * stdDev;
+  const maxX = mean + 4 * stdDev;
+  const points = [];
+  for (let x = minX; x <= maxX; x += stdDev / 10) {
+    const y = (1 / (stdDev * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * Math.pow((x - mean) / stdDev, 2));
+    points.push([x, y]);
+  }
+
+  chart.setOption({
+    textStyle: { fontFamily: 'Inter' },
+    backgroundColor: 'transparent',
+    grid: { left: 20, right: 20, top: 40, bottom: 20, containLabel: true },
+    xAxis: {
+      type: 'value',
+      min: parseFloat(minX.toFixed(1)),
+      max: parseFloat(maxX.toFixed(1)),
+      axisLabel: { color: cssVar('--text-secondary') },
+      splitLine: { show: false }
+    },
+    yAxis: { type: 'value', show: false },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(20,20,20,0.9)',
+      textStyle: { color: '#fff' },
+      formatter: (params) => {
+        const x = params[0].value[0];
+        return `OVR ${x.toFixed(1)}`;
+      }
+    },
+    series: [
+      {
+        type: 'line',
+        data: points,
+        smooth: true,
+        showSymbol: false,
+        lineStyle: { width: 3, color: cssVar('--accent-violet') },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(139, 92, 246, 0.4)' },
+            { offset: 1, color: 'rgba(139, 92, 246, 0.05)' }
+          ])
+        },
+        markLine: {
+          symbol: 'none',
+          label: { position: 'end', color: '#fff', formatter: '{b}' },
+          data: [
+            { xAxis: p10, lineStyle: { color: cssVar('--negative'), type: 'dashed' }, label: { formatter: 'Floor\n' + p10.toFixed(0) } },
+            { xAxis: p50, lineStyle: { color: cssVar('--text-primary'), type: 'solid' }, label: { formatter: 'Pred\n' + p50.toFixed(0) } },
+            { xAxis: p90, lineStyle: { color: cssVar('--positive'), type: 'dashed' }, label: { formatter: 'Ceiling\n' + p90.toFixed(0) } }
+          ]
+        }
+      }
+    ]
+  });
+  window.addEventListener('resize', () => chart.resize());
+}
+
+function renderComposition(reasons, playerName) {
+  const compChartEl = document.getElementById('compChart');
+  if (!compChartEl || !window.echarts) return;
+  const chart = echarts.init(compChartEl);
+
+  if (!reasons || !reasons.length) {
+    chart.clear();
+    compChartEl.innerHTML = '<div class="muted" style="height:100%; display:flex; align-items:center; justify-content:center;">No data available.</div>';
+    return;
+  }
+
+  // Heuristics to categorize attributes
+  const cats = {
+    'Physical': ['PAC', 'Sprint', 'Accel', 'Strength', 'Stamina', 'Jump', 'Agility', 'Balance', 'React'],
+    'Technical': ['DRI', 'Ball', 'Control', 'Pass', 'Cross', 'Curve', 'Free', 'Long', 'Short', 'Vis'],
+    'Attacking': ['SHO', 'Fin', 'Att', 'Pos', 'Volley', 'Pen', 'Shot', 'Power'],
+    'Defending': ['DEF', 'Inter', 'Head', 'Mark', 'Stand', 'Slid', 'Aggress']
+  };
+
+  const scores = { 'Physical': 0, 'Technical': 0, 'Attacking': 0, 'Defending': 0, 'Other': 0 };
+
+  reasons.forEach(r => {
+    const feature = r.feature;
+    let found = false;
+    for (const [cat, keywords] of Object.entries(cats)) {
+      if (keywords.some(k => feature.includes(k))) {
+        scores[cat] += Math.abs(r.impact); // Use absolute impact to gauge importance
+        found = true;
+        break;
+      }
+    }
+    if (!found) scores['Other'] += Math.abs(r.impact);
+  });
+
+  const data = Object.entries(scores)
+    .filter(([_, val]) => val > 0.1)
+    .map(([name, value]) => ({ name, value }));
+
+  chart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'item', backgroundColor: 'rgba(20,20,20,0.9)', textStyle: { color: '#fff' } },
+    legend: { bottom: 0, textStyle: { color: cssVar('--text-secondary') }, icon: 'circle' },
+    series: [
+      {
+        name: 'Rating Composition',
+        type: 'pie',
+        radius: ['40%', '70%'],
+        center: ['50%', '45%'],
+        itemStyle: {
+          borderRadius: 5,
+          borderColor: '#18181b',
+          borderWidth: 2
+        },
+        label: { show: false },
+        data: data,
+        color: [
+          cssVar('--accent-cyan'),
+          cssVar('--accent-violet'),
+          cssVar('--accent-emerald'),
+          cssVar('--accent-rose'),
+          '#94a3b8'
+        ]
+      }
+    ]
+  });
+  window.addEventListener('resize', () => chart.resize());
 }
 
 function renderNetwork(similarResults, playerA) {
   if (!networkEl || !window.echarts) return;
+
+  // Dispose existing instance to ensure clean state or get existing
+  let chart = echarts.getInstanceByDom(networkEl);
+  if (!chart) chart = echarts.init(networkEl);
+
   if (!playerA || !similarResults || !similarResults.length) {
-    networkEl.innerHTML = '<div class="muted">Run a similarity search to see the network.</div>';
+    chart.clear();
+    networkEl.innerHTML = '<div class="muted" style="height:100%; display:flex; align-items:center; justify-content:center;">Run a similarity search to see the network.</div>';
     return;
   }
-  const chart = echarts.init(networkEl);
+
+  // Ensure container has height
+  if (networkEl.clientHeight === 0) {
+    networkEl.style.height = '400px';
+  }
+
   const sims = similarResults.map(s => s.similarity || 0);
   const maxSim = Math.max(...sims);
   const minSim = Math.min(...sims);
@@ -638,103 +903,203 @@ function renderNetwork(similarResults, playerA) {
     id: 'center',
     name: playerA.Name || playerA.name || 'Player A',
     category: 0,
-    symbolSize: 40,
-    itemStyle: { color: cssVar('--accent-emerald'), borderColor: '#fff', borderWidth: 2, shadowBlur: 10, shadowColor: cssVar('--accent-emerald') },
-    label: { show: true, color: '#fff', fontWeight: 'bold' },
+    symbolSize: 60,
+    itemStyle: {
+      color: new echarts.graphic.RadialGradient(0.5, 0.5, 0.5, [
+        { offset: 0, color: '#10b981' },
+        { offset: 1, color: '#047857' }
+      ]),
+      borderColor: '#ecfdf5',
+      borderWidth: 3,
+      shadowBlur: 20,
+      shadowColor: 'rgba(16, 185, 129, 0.5)'
+    },
+    label: { show: true, color: '#fff', fontWeight: 800, fontSize: 14, textShadowBlur: 4, textShadowColor: '#000' },
   }];
+
   const edges = [];
   similarResults.forEach((s, idx) => {
     const score = norm(s.similarity || 0);
+    const size = 25 + score * 25;
+    const color = score > 0.6 ? '#22d3ee' : '#a78bfa'; // Cyan for high match, Violet for lower
+
     nodes.push({
       id: String(s.id || idx),
+      dataId: s.id, // Store real ID for click handler
       name: s.name || s.id,
       category: 1,
-      symbolSize: 20 + score * 15,
+      symbolSize: size,
       value: s.similarity || 0,
-      itemStyle: { color: cssVar('--accent-cyan'), borderColor: '#fff', borderWidth: 1 },
-      label: { show: true, position: 'right', color: cssVar('--text-secondary') },
+      itemStyle: {
+        color: color,
+        borderColor: '#fff',
+        borderWidth: 2,
+        shadowBlur: 10 + score * 10,
+        shadowColor: color
+      },
+      label: {
+        show: true,
+        position: 'bottom',
+        color: cssVar('--text-secondary'),
+        fontSize: 11,
+        formatter: (p) => p.name.length > 10 ? p.name.substring(0, 9) + '..' : p.name
+      },
       tooltip: {
-        formatter: `${s.name || s.id}<br/>OVR ${s.ovr || '—'} | ${s.position || ''}<br/>Sim ${s.similarity !== undefined ? s.similarity.toFixed(3) : '—'}`
+        formatter: `${s.name}<br/>OVR ${s.ovr || '—'}<br/>Sim ${s.similarity !== undefined ? s.similarity.toFixed(3) : '—'}`
       }
     });
+
     edges.push({
       source: 'center',
       target: String(s.id || idx),
-      lineStyle: { width: 1 + score * 4, color: 'rgba(34, 211, 238, 0.3)', curveness: 0.2 },
+      lineStyle: {
+        width: 1 + score * 4,
+        color: {
+          type: 'linear',
+          x: 0, y: 0, x2: 1, y2: 0,
+          colorStops: [{ offset: 0, color: '#10b981' }, { offset: 1, color: color }],
+        },
+        curveness: 0.15
+      },
       value: s.similarity || 0,
     });
   });
 
   chart.setOption({
     backgroundColor: 'transparent',
-    tooltip: {},
+    animationDurationUpdate: 1500,
+    animationEasingUpdate: 'quinticInOut',
+    tooltip: { backgroundColor: 'rgba(20,20,20,0.9)', textStyle: { color: '#fff' }, borderColor: '#333' },
     series: [{
       type: 'graph',
       layout: 'force',
       roam: true,
+      draggable: true,
       focusNodeAdjacency: true,
       force: {
-        repulsion: 400,
+        repulsion: 1000,
         gravity: 0.1,
-        edgeLength: [80, 150],
+        edgeLength: [120, 220],
+        friction: 0.6
       },
       data: nodes,
       edges,
       label: { fontFamily: 'Inter' }
     }],
   });
+
+  // Interaction: Click to compare
+  chart.off('click'); // remove old listeners
+  chart.on('click', (params) => {
+    if (params.dataType === 'node' && params.data.dataId) {
+      // Add to selection if not present
+      const id = String(params.data.dataId);
+      if (!selectedIds.includes(id)) {
+        if (selectedIds.length >= 4) selectedIds.pop(); // keep limit
+        selectedIds.push(id);
+        renderSelectedChips();
+        renderPlayerList(playersFiltered());
+        compare(); // Auto-run comparison
+
+        // Scroll to top
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+  });
+
   window.addEventListener('resize', () => chart.resize());
 }
 
+// Global Resize Handler for details/summary
+document.querySelectorAll('details').forEach(d => {
+  d.addEventListener('toggle', () => {
+    if (d.open) {
+      requestAnimationFrame(() => {
+        document.querySelectorAll('.details-content div[id]').forEach(div => {
+          const chart = echarts.getInstanceByDom(div);
+          if (chart) chart.resize();
+        });
+      });
+    }
+  });
+});
+
 function renderRadar(topReasons, nameA, nameB) {
-  if (!radarEl || !topReasons || !topReasons.length || !window.echarts) return;
-  const usable = topReasons.filter(r => !isNaN(r.value_a) && !isNaN(r.value_b));
-  if (!usable.length) {
-    radarEl.innerHTML = '<div class="muted">No numeric drivers to plot.</div>';
+  if (!radarEl || !window.echarts) return;
+  const chart = echarts.init(radarEl);
+
+  if (!topReasons || !topReasons.length) {
+    chart.clear();
+    radarEl.innerHTML = '<div class="muted" style="height:100%; display:flex; align-items:center; justify-content:center;">No numeric drivers to plot.</div>';
     return;
   }
-  const features = usable.slice(0, 10).map(r => r.feature);
-  const valsA = usable.slice(0, 10).map(r => Number(r.value_a));
-  const valsB = usable.slice(0, 10).map(r => Number(r.value_b));
+
+  const usable = topReasons.filter(r => !isNaN(r.value_a) && !isNaN(r.value_b));
+  if (!usable.length) return;
+
+  const features = usable.slice(0, 8).map(r => r.feature);
+  const valsA = usable.slice(0, 8).map(r => Number(r.value_a));
+  const valsB = usable.slice(0, 8).map(r => Number(r.value_b));
   const maxVal = Math.max(...valsA, ...valsB) || 1;
-  const indicator = features.map(f => ({ name: f, max: maxVal + 5 }));
-  const chart = echarts.init(radarEl);
+
+  // Create indicators with some buffer
+  const indicator = features.map(f => ({ name: f, max: maxVal * 1.2 }));
+
   chart.setOption({
     backgroundColor: 'transparent',
     radar: {
       indicator,
-      splitNumber: 4,
+      center: ['50%', '55%'],
       radius: '65%',
-      splitArea: { areaStyle: { color: ['rgba(255,255,255,0.01)', 'rgba(255,255,255,0.03)'] } },
+      splitNumber: 3,
+      splitArea: {
+        show: true,
+        areaStyle: {
+          color: ['rgba(255,255,255,0.01)', 'rgba(255,255,255,0.03)']
+        }
+      },
       axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
       splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } },
-      name: { color: cssVar('--text-secondary') },
+      axisName: {
+        color: cssVar('--text-secondary'),
+        backgroundColor: 'rgba(0,0,0,0.3)',
+        borderRadius: 4,
+        padding: [4, 6]
+      },
     },
     legend: {
       data: [nameA || 'Player A', nameB || 'Player B'],
-      bottom: 0,
-      textStyle: { color: '#e5e7eb' },
+      bottom: 10,
+      itemGap: 20,
+      textStyle: { color: '#e5e7eb', fontSize: 13, fontWeight: 600 },
+      selectedMode: 'multiple'
     },
     series: [
       {
         type: 'radar',
         data: [
-            { 
-                value: valsA, 
-                name: nameA || 'Player A',
-                itemStyle: { color: cssVar('--accent-emerald') },
-                areaStyle: { color: 'rgba(16, 185, 129, 0.2)' }
-            },
-            { 
-                value: valsB, 
-                name: nameB || 'Player B',
-                itemStyle: { color: cssVar('--accent-cyan') },
-                areaStyle: { color: 'rgba(34, 211, 238, 0.2)' }
-            }
+          {
+            value: valsA,
+            name: nameA || 'Player A',
+            itemStyle: { color: '#10b981' },
+            lineStyle: { width: 3, color: '#10b981', shadowBlur: 10, shadowColor: 'rgba(16, 185, 129, 0.5)' },
+            areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(16, 185, 129, 0.4)' }, { offset: 1, color: 'rgba(16, 185, 129, 0.05)' }]) },
+            symbol: 'circle',
+            symbolSize: 6
+          },
+          {
+            value: valsB,
+            name: nameB || 'Player B',
+            itemStyle: { color: '#22d3ee' },
+            lineStyle: { width: 3, color: '#22d3ee', shadowBlur: 10, shadowColor: 'rgba(34, 211, 238, 0.5)' },
+            areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(34, 211, 238, 0.4)' }, { offset: 1, color: 'rgba(34, 211, 238, 0.05)' }]) },
+            symbol: 'circle',
+            symbolSize: 6
+          }
         ]
       },
     ],
-    tooltip: { trigger: 'item' },
+    tooltip: { trigger: 'item', backgroundColor: 'rgba(20,20,20,0.9)', textStyle: { color: '#fff' } },
   });
   window.addEventListener('resize', () => chart.resize());
 }
