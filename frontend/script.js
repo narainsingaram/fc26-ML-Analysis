@@ -16,6 +16,14 @@ const heroCardA = document.getElementById('heroCardA');
 const heroCardB = document.getElementById('heroCardB');
 const versCardA = document.getElementById('versCardA');
 const versCardB = document.getElementById('versCardB');
+const posFilter = document.getElementById('posFilter');
+const leagueFilter = document.getElementById('leagueFilter');
+const genderFilter = document.getElementById('genderFilter');
+const ovrRangeMin = document.getElementById('ovrRange');
+const ovrRangeMax = document.getElementById('ovrRangeMax');
+const ovrMinLabel = document.getElementById('ovrMinLabel');
+const ovrMaxLabel = document.getElementById('ovrMaxLabel');
+const clearFiltersBtn = document.getElementById('clearFilters');
 const modelNameEl = document.getElementById('modelName');
 const modelMaeEl = document.getElementById('modelMae');
 const modelRmseEl = document.getElementById('modelRmse');
@@ -47,6 +55,9 @@ const compChartEl = document.getElementById('compChart');
 let players = [];
 let playerMap = new Map();
 let selectedIds = [];
+let leagueOptions = [];
+let positionOptions = [];
+let formationAssignments = {};
 
 function optionLabel(p) {
   return `${p.Name} (OVR ${p.OVR}, ${p.Position})`;
@@ -147,9 +158,13 @@ function renderSelectedChips() {
     const p = playerMap.get(String(id));
     const chip = document.createElement('span');
     chip.className = 'pill active';
-    chip.style.cursor = 'pointer';
+    chip.style.cursor = 'grab';
     chip.textContent = p ? `${p.Name} · ${p.Position}` : id;
     chip.onclick = () => toggleSelect(id);
+    chip.setAttribute('draggable', 'true');
+    chip.ondragstart = (e) => {
+      e.dataTransfer.setData('playerId', String(id));
+    };
     selectedChips.appendChild(chip);
   });
 }
@@ -157,12 +172,22 @@ function renderSelectedChips() {
 function renderPlayerList(list) {
   if (!playerListEl) return;
   playerListEl.innerHTML = '';
+  if (!list.length) {
+    const empty = document.createElement('div');
+    empty.className = 'muted small';
+    empty.style.padding = '0.75rem';
+    empty.textContent = 'No players match these filters.';
+    playerListEl.appendChild(empty);
+    renderSelectedChips();
+    return;
+  }
   list.forEach(p => {
     const isSelected = selectedIds.includes(String(p.ID));
     const disabled = !isSelected && selectedIds.length >= 4;
     const card = document.createElement('div');
     card.className = `player-option ${isSelected ? 'selected' : ''}`;
     if (disabled) card.style.opacity = '0.5';
+    // Dragging restricted to selected chips; list remains click-to-select.
 
     card.onclick = () => {
       if (disabled) return;
@@ -195,9 +220,28 @@ function toggleSelect(id) {
   renderPreview();
 }
 
+function getFilterState() {
+  const term = (searchInput?.value || '').toLowerCase();
+  const pos = posFilter?.value || '';
+  const league = leagueFilter?.value || '';
+  const gender = (genderFilter?.value || '').toLowerCase();
+  const minOvr = Number(ovrRangeMin?.value || 0);
+  const maxOvr = Number(ovrRangeMax?.value || 99);
+  return { term, pos, league, gender, minOvr, maxOvr };
+}
+
 function playersFiltered(term = searchInput?.value || '') {
-  const t = term.toLowerCase();
-  return players.filter(p => p.Name.toLowerCase().includes(t));
+  const filters = getFilterState();
+  const searchTerm = term ? term.toLowerCase() : filters.term;
+  return players.filter(p => {
+    if (searchTerm && !p.Name.toLowerCase().includes(searchTerm)) return false;
+    if (filters.pos && String(p.Position).toUpperCase() !== filters.pos.toUpperCase()) return false;
+    if (filters.league && String(p.League) !== filters.league) return false;
+    if (filters.gender && String(p.GENDER || '').toLowerCase() !== filters.gender) return false;
+    const ovrVal = Number(p.OVR || 0);
+    if (ovrVal < filters.minOvr || ovrVal > filters.maxOvr) return false;
+    return true;
+  });
 }
 
 async function fetchJson(url, options = {}) {
@@ -243,18 +287,108 @@ async function loadModelMeta() {
 }
 
 async function loadPlayers(search = '') {
-  const params = new URLSearchParams({ limit: 500 });
+  const params = new URLSearchParams({ limit: 400 });
+
+  // Basic Search
   if (search) params.append('search', search);
-  const data = await fetchJson(`/api/players?${params.toString()}`);
-  players = data.players || [];
-  playerMap = new Map(players.map(p => [String(p.ID), p]));
-  renderPlayerList(players);
-  renderPreview();
+
+  // Advanced Filters
+  const pos = document.getElementById('posFilter')?.value;
+  const league = document.getElementById('leagueFilter')?.value;
+  const nation = document.getElementById('nationFilter')?.value;
+  const gender = document.getElementById('genderFilter')?.value;
+
+  if (pos) params.append('position', pos);
+  if (league) params.append('league', league);
+  if (nation) params.append('nation', nation);
+  if (gender) params.append('gender', gender);
+
+  // Physical
+  const minAge = document.getElementById('minAge')?.value;
+  const maxAge = document.getElementById('maxAge')?.value;
+  const minH = document.getElementById('minHeight')?.value;
+  const maxH = document.getElementById('maxHeight')?.value;
+  const minW = document.getElementById('minWeight')?.value;
+  const maxW = document.getElementById('maxWeight')?.value;
+
+  if (minAge) params.append('min_age', minAge);
+  if (maxAge) params.append('max_age', maxAge);
+  if (minH) params.append('min_height', minH);
+  if (maxH) params.append('max_height', maxH);
+  if (minW) params.append('min_weight', minW);
+  if (maxW) params.append('max_weight', maxW);
+
+  // Stats
+  const minOvr = document.getElementById('ovrRange')?.value;
+  if (minOvr) params.append('min_ovr', minOvr);
+
+  const minWf = document.getElementById('minWf')?.value;
+  const minSm = document.getElementById('minSm')?.value;
+  if (minWf > 1) params.append('min_wf', minWf);
+  if (minSm > 1) params.append('min_sm', minSm);
+
+  // Traits
+  const ps = document.getElementById('playStyleFilter')?.value;
+  if (ps) params.append('playstyle', ps);
+
+  try {
+    const data = await fetchJson(`/api/players?${params.toString()}`);
+    players = data.players || [];
+    playerMap = new Map(players.map(p => [String(p.ID), p]));
+
+    // We only update dropdowns once or if empty to avoiding resetting selection while searching
+    if (!positionOptions.length) {
+      positionOptions = Array.from(new Set(players.map(p => p.Position).filter(Boolean))).sort();
+      const posEl = document.getElementById('posFilter');
+      if (posEl && posEl.children.length <= 1) {
+        posEl.innerHTML = '<option value=\"\">Any</option>' + positionOptions.map(p => `<option value=\"${p}\">${p}</option>`).join('');
+      }
+    }
+    if (!leagueOptions.length) {
+      leagueOptions = Array.from(new Set(players.map(p => p.League).filter(Boolean))).sort();
+      const leagueEl = document.getElementById('leagueFilter');
+      if (leagueEl && leagueEl.children.length <= 1) {
+        leagueEl.innerHTML = '<option value=\"\">Any</option>' + leagueOptions.map(l => `<option value=\"${l}\">${l}</option>`).join('');
+      }
+    }
+
+    renderPlayerList(players); // No more client-side filter
+    renderPreview();
+  } catch (e) {
+    console.error(e);
+    if (playerListEl) playerListEl.innerHTML = '<div class="muted small" style="padding:1rem;">Search failed: ' + e.message + '</div>';
+  }
 }
 
-function filterPlayers(term) {
-  const filtered = playersFiltered(term);
-  renderPlayerList(filtered.length ? filtered : players);
+// Re-using debounce from earlier
+const debouncedLoad = debounce(() => {
+  loadPlayers(document.getElementById('search').value);
+}, 400);
+
+function bindSearchEvents() {
+  const ids = ['search', 'posFilter', 'leagueFilter', 'nationFilter', 'genderFilter',
+    'minAge', 'maxAge', 'minHeight', 'maxHeight', 'minWeight', 'maxWeight',
+    'ovrRange', 'minWf', 'minSm', 'playStyleFilter'];
+
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', debouncedLoad);
+      el.addEventListener('change', debouncedLoad);
+    }
+  });
+
+  document.getElementById('applyFilters')?.addEventListener('click', () => loadPlayers(document.getElementById('search').value));
+  document.getElementById('clearFilters')?.addEventListener('click', () => {
+    // Reset all inputs
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    document.getElementById('ovrRange').value = 40;
+    document.getElementById('ovrLabel').textContent = '40';
+    loadPlayers('');
+  });
 }
 
 function renderPreview() {
@@ -1175,10 +1309,209 @@ similarBtn.addEventListener('click', fetchSimilar);
 anomBtn.addEventListener('click', fetchAnomalies);
 
 renderVersatilityFromPlayers(null, null);
+bindSearchEvents();
 loadModelMeta();
 loadPlayers().catch(err => {
   errorEl.textContent = err.message;
 });
+
+function syncRangeLabels() {
+  if (!ovrRangeMin || !ovrRangeMax) return;
+  let minVal = Number(ovrRangeMin.value);
+  let maxVal = Number(ovrRangeMax.value);
+  if (minVal > maxVal) {
+    // keep sliders consistent
+    [minVal, maxVal] = [maxVal, minVal];
+    ovrRangeMin.value = minVal;
+    ovrRangeMax.value = maxVal;
+  }
+  if (ovrMinLabel) ovrMinLabel.textContent = minVal;
+  if (ovrMaxLabel) ovrMaxLabel.textContent = maxVal;
+}
+
+function attachFilterEvents() {
+  if (posFilter) posFilter.addEventListener('change', () => renderPlayerList(playersFiltered()));
+  if (leagueFilter) leagueFilter.addEventListener('change', () => renderPlayerList(playersFiltered()));
+  if (genderFilter) genderFilter.addEventListener('change', () => renderPlayerList(playersFiltered()));
+  const onRange = () => { syncRangeLabels(); renderPlayerList(playersFiltered()); };
+  if (ovrRangeMin) ovrRangeMin.addEventListener('input', onRange);
+  if (ovrRangeMax) ovrRangeMax.addEventListener('input', onRange);
+  if (clearFiltersBtn) {
+    clearFiltersBtn.addEventListener('click', () => {
+      if (searchInput) searchInput.value = '';
+      if (posFilter) posFilter.value = '';
+      if (leagueFilter) leagueFilter.value = '';
+      if (genderFilter) genderFilter.value = '';
+      if (ovrRangeMin) ovrRangeMin.value = 70;
+      if (ovrRangeMax) ovrRangeMax.value = 99;
+      syncRangeLabels();
+      renderPlayerList(playersFiltered());
+    });
+  }
+  syncRangeLabels();
+}
+
+attachFilterEvents();
+
+// Formation builder setup
+const formations = {
+  "433": ["GK", "RB", "RCB", "LCB", "LB", "CDM", "CM", "CAM", "RW", "ST", "LW"],
+  "442": ["GK", "RB", "RCB", "LCB", "LB", "RM", "CM1", "CM2", "LM", "ST1", "ST2"],
+  "352": ["GK", "RCB", "CB", "LCB", "CDM", "CM", "RM", "LM", "CAM", "ST1", "ST2"],
+};
+
+function slotPositions(formationKey) {
+  const key = formationKey || "433";
+  const slots = formations[key] || formations["433"];
+  // simple grid positions (percentages)
+  const layout = [];
+  const rows = [
+    { y: 85, count: 3 },
+    { y: 65, count: 3 },
+    { y: 45, count: 3 },
+    { y: 25, count: 2 },
+  ];
+  let idx = 0;
+  rows.forEach(r => {
+    const spacing = 100 / (r.count + 1);
+    for (let i = 0; i < r.count && idx < slots.length; i++) {
+      layout.push({ position: slots[idx], top: `${r.y}%`, left: `${spacing * (i + 1)}%` });
+      idx += 1;
+    }
+  });
+  // Fill remaining (if any)
+  for (; idx < slots.length; idx++) {
+    layout.push({ position: slots[idx], top: `${10 + idx * 5}%`, left: `${10 + (idx % 4) * 20}%` });
+  }
+  return layout;
+}
+
+function renderPitch() {
+  const pitch = document.getElementById('pitch');
+  const formationSelect = document.getElementById('formationSelect');
+  if (!pitch) return;
+  pitch.innerHTML = '';
+  pitch.setAttribute('data-drop-hint', 'Drop selected player chips here');
+  const key = formationSelect ? formationSelect.value : '433';
+  const layout = slotPositions(key);
+  layout.forEach(slot => {
+    const el = document.createElement('div');
+    el.className = 'pitch-slot';
+    el.style.top = slot.top;
+    el.style.left = slot.left;
+    el.dataset.position = slot.position;
+    el.innerHTML = `<div class="slot-pos">${slot.position}</div><div class="slot-player muted small">Drop player</div>`;
+    el.ondragover = (e) => e.preventDefault();
+    el.ondrop = (e) => {
+      e.preventDefault();
+      const pid = e.dataTransfer.getData('playerId');
+      if (pid) assignToSlot(slot.position, pid);
+    };
+    el.onclick = () => {
+      // show suggestions if empty
+      if (!formationAssignments[slot.position]) {
+        fetchFormationAnalysis();
+      }
+    };
+    pitch.appendChild(el);
+  });
+  updatePitchAssignments();
+}
+
+function assignToSlot(position, playerId) {
+  formationAssignments = { ...formationAssignments, [position]: String(playerId) };
+  updatePitchAssignments();
+}
+
+function clearFormation() {
+  formationAssignments = {};
+  updatePitchAssignments();
+  document.getElementById('teamStrength').textContent = '—';
+  document.getElementById('chemistryScore').textContent = '—';
+  document.getElementById('chemistryHint').textContent = '';
+  document.getElementById('formationSuggestions').textContent = 'Drop players to get AI-backed fit scores.';
+}
+
+function updatePitchAssignments() {
+  const pitch = document.getElementById('pitch');
+  if (!pitch) return;
+  Array.from(pitch.querySelectorAll('.pitch-slot')).forEach(slot => {
+    const pos = slot.dataset.position;
+    const pid = formationAssignments[pos];
+    if (pid) {
+      const player = playerMap.get(String(pid));
+      slot.classList.add('assigned');
+      slot.querySelector('.slot-player').innerHTML = `${player?.Name || pid}<br/><span class="muted tiny">${player?.Position || ''}</span>`;
+    } else {
+      slot.classList.remove('assigned');
+      slot.querySelector('.slot-player').textContent = 'Drop player';
+    }
+  });
+}
+
+async function fetchFormationAnalysis() {
+  const formationSelect = document.getElementById('formationSelect');
+  const formation = formations[formationSelect.value] || formations["433"];
+  const payload = { formation, assignments: formationAssignments };
+  try {
+    const data = await fetchJson('/api/formation/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (data.team_strength !== undefined && data.team_strength !== null) {
+      document.getElementById('teamStrength').textContent = data.team_strength.toFixed(2);
+    } else {
+      document.getElementById('teamStrength').textContent = '—';
+    }
+    if (data.chemistry_score !== undefined && data.chemistry_score !== null) {
+      document.getElementById('chemistryScore').textContent = data.chemistry_score.toFixed(1);
+      if (data.chemistry_suggestion) {
+        document.getElementById('chemistryHint').textContent = `Weak link: ${data.chemistry_suggestion.replace_player_id}. Try ${data.chemistry_suggestion.suggested_name}`;
+      } else {
+        document.getElementById('chemistryHint').textContent = '';
+      }
+    } else {
+      document.getElementById('chemistryScore').textContent = '—';
+      document.getElementById('chemistryHint').textContent = '';
+    }
+
+    const suggestionEl = document.getElementById('formationSuggestions');
+    if (suggestionEl) {
+      suggestionEl.innerHTML = '';
+      Object.entries(data.suggestions || {}).forEach(([pos, suggestions]) => {
+        const row = document.createElement('div');
+        row.style.marginBottom = '6px';
+        const label = document.createElement('div');
+        label.className = 'tiny muted';
+        label.textContent = pos;
+        row.appendChild(label);
+        (suggestions || []).slice(0, 3).forEach(s => {
+          const chip = document.createElement('span');
+          chip.className = 'suggestion-chip';
+          chip.textContent = `${s.name} (${s.adjusted_ovr.toFixed(1)})`;
+          chip.onclick = () => assignToSlot(pos, s.id);
+          row.appendChild(chip);
+        });
+        suggestionEl.appendChild(row);
+      });
+    }
+    updatePitchAssignments();
+  } catch (err) {
+    const suggestionEl = document.getElementById('formationSuggestions');
+    if (suggestionEl) suggestionEl.textContent = err.message;
+  }
+}
+
+// Event bindings for formation UI
+const formationSelectEl = document.getElementById('formationSelect');
+if (formationSelectEl) formationSelectEl.addEventListener('change', () => { clearFormation(); renderPitch(); });
+const clearFormationBtn = document.getElementById('clearFormation');
+if (clearFormationBtn) clearFormationBtn.addEventListener('click', clearFormation);
+const analyzeFormationBtn = document.getElementById('analyzeFormation');
+if (analyzeFormationBtn) analyzeFormationBtn.addEventListener('click', fetchFormationAnalysis);
+
+renderPitch();
 
 // Load causal effects on page load
 (async function loadCausal() {

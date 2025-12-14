@@ -4,115 +4,248 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FC26 Analytics Lab</title>
+  <title>FC26 Analytics Command</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <style>
+    /* Page specific overrides for dashboard layout */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .col-3 {
+      grid-column: span 3;
+    }
+
+    .col-4 {
+      grid-column: span 4;
+    }
+
+    .col-6 {
+      grid-column: span 6;
+    }
+
+    .col-8 {
+      grid-column: span 8;
+    }
+
+    .col-12 {
+      grid-column: span 12;
+    }
+
+    @media (max-width: 1024px) {
+
+      .col-3,
+      .col-4,
+      .col-6,
+      .col-8 {
+        grid-column: span 12 !important;
+      }
+    }
+
+    .kpi-value {
+      font-size: 2.5rem;
+      font-weight: 800;
+      line-height: 1;
+      margin-bottom: 0.25rem;
+    }
+
+    .kpi-label {
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+    }
+
+    .chart-container {
+      width: 100%;
+      height: 300px;
+    }
+
+    .section-header {
+      grid-column: span 12;
+      border-bottom: 1px solid var(--panel-border);
+      padding-bottom: 0.5rem;
+      margin-bottom: 0.5rem;
+      margin-top: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+
+    .section-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-primary);
+    }
+
+    .tag.highlight {
+      background: var(--accent-cyan);
+      color: #000;
+    }
+  </style>
 </head>
 
 <body>
   <header>
     <h1>
-      <span class="text-gradient">FC26</span> Analytics Lab
+      <span class="text-gradient">FC26</span> Analytics Command
     </h1>
     <a href="/" class="btn secondary" style="text-decoration: none; font-size: 0.875rem;">← Back to Engine</a>
   </header>
 
   <main>
-    <!-- Top KPI Cards -->
-    <div class="grid">
-      <div class="col-span-3 card" style="display:flex; flex-direction:column; align-items:center;">
-        <div class="tiny muted" style="margin-bottom:0.5rem; text-transform:uppercase;">RMSE</div>
-        <div class="value" id="rmse" style="font-size: 2rem; font-weight: 800; color: var(--accent-cyan);">—</div>
+    <!-- KPI Row -->
+    <div class="dashboard-grid">
+      <div class="col-3 card" style="text-align: center;">
+        <div class="kpi-value text-gradient" id="rmse">—</div>
+        <div class="kpi-label">RMSE (Test)</div>
       </div>
-      <div class="col-span-3 card" style="display:flex; flex-direction:column; align-items:center;">
-        <div class="tiny muted" style="margin-bottom:0.5rem; text-transform:uppercase;">MAE</div>
-        <div class="value" id="mae" style="font-size: 2rem; font-weight: 800; color: var(--accent-violet);">—</div>
+      <div class="col-3 card" style="text-align: center;">
+        <div class="kpi-value" id="mae" style="color: var(--accent-violet);">—</div>
+        <div class="kpi-label">MAE (Test)</div>
       </div>
-      <div class="col-span-3 card" style="display:flex; flex-direction:column; align-items:center;">
-        <div class="tiny muted" style="margin-bottom:0.5rem; text-transform:uppercase;">R² Score</div>
-        <div class="value" id="r2" style="font-size: 2rem; font-weight: 800; color: var(--accent-emerald);">—</div>
+      <div class="col-3 card" style="text-align: center;">
+        <div class="kpi-value" id="r2" style="color: var(--accent-emerald);">—</div>
+        <div class="kpi-label">R² Score</div>
       </div>
-      <div class="col-span-3 card" style="display:flex; flex-direction:column; align-items:center;">
-        <div class="tiny muted" style="margin-bottom:0.5rem; text-transform:uppercase;">Records</div>
-        <div class="value" id="count" style="font-size: 2rem; font-weight: 800; color: var(--text-primary);">—</div>
-      </div>
-    </div>
-
-    <!-- Methodology & Insights -->
-    <div class="grid">
-      <div class="col-span-8 card">
-        <h3 style="margin-bottom: 1rem;">Methodology Reference</h3>
-        <ul class="muted small" style="line-height: 1.6; padding-left: 1.2rem;">
-          <li><strong style="color:var(--text-primary)">RMSE</strong>: Punishes large errors more heavily. Lower is
-            better.</li>
-          <li><strong style="color:var(--text-primary)">MAE</strong>: Average miss in rating points. Lower is better.
-          </li>
-          <li><strong style="color:var(--text-primary)">R²</strong>: Variance explained. Closer to 1.0 is better.</li>
-          <li><strong style="color:var(--text-primary)">Residual</strong>: Actual - Predicted. Positive means the model
-            under-rates the player (potential bargain).</li>
-        </ul>
-      </div>
-
-      <div class="col-span-4 card primary">
-        <h3 style="margin-bottom: 1rem;">Auto Insights</h3>
-        <ul class="muted small" id="insightList" style="padding-left: 1.2rem; line-height: 1.5;"></ul>
+      <div class="col-3 card" style="text-align: center;">
+        <div class="kpi-value" id="count" style="color: var(--text-primary);">—</div>
+        <div class="kpi-label">Total Players</div>
       </div>
     </div>
 
-    <!-- Charts -->
-    <div class="grid">
-      <div class="col-span-4 card">
-        <h3 style="margin-bottom: 1rem;">Position RMSE (Error by Role)</h3>
-        <div id="posChart" style="height: 280px;"></div>
+    <!-- Section: Model DNA -->
+    <div class="dashboard-grid">
+      <div class="section-header">
+        <div class="section-title">🧬 Model DNA</div>
+        <div class="tiny muted">Architecture & metadata</div>
       </div>
-      <div class="col-span-4 card">
-        <h3 style="margin-bottom: 1rem;">Gender Fairness Gap</h3>
-        <div id="genderChart" style="height: 280px;"></div>
-      </div>
-      <div class="col-span-4 card">
-        <h3 style="margin-bottom: 1rem;">OVR Distribution</h3>
-        <div id="histChart" style="height: 280px;"></div>
+
+      <div class="col-12 card" id="modelDnaCard"
+        style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+        <div>
+          <div class="tiny muted" style="margin-bottom:4px;">Architecture</div>
+          <div style="font-size: 1.5rem; font-weight: 700;" id="modelArch">—</div>
+        </div>
+        <div>
+          <div class="tiny muted" style="margin-bottom:4px;">Optimization</div>
+          <div id="modelOpt" class="muted small">—</div>
+        </div>
+        <div>
+          <div class="tiny muted" style="margin-bottom:4px;">Training Seed</div>
+          <div class="tag" id="modelSeed">—</div>
+        </div>
+        <div style="text-align: right;">
+          <div class="tiny muted" style="margin-bottom:4px;">Status</div>
+          <div class="tag highlight">PRODUCTION READY</div>
+        </div>
       </div>
     </div>
 
-    <!-- Scatter -->
-    <div class="grid">
-      <div class="col-span-12 card">
-        <h3 style="margin-bottom: 0.5rem;">Actual vs Predicted OVR</h3>
-        <div class="muted small" style="margin-bottom: 1rem;">Points below diagonal = Overrated by model. Points above =
-          Underrated by model.</div>
-        <div id="scatterChart" style="height: 400px;"></div>
+    <!-- Section: Intelligence -->
+    <div class="dashboard-grid">
+      <div class="section-header">
+        <div class="section-title">🧠 Feature Intelligence</div>
+        <div class="tiny muted">What drives the ratings?</div>
+      </div>
+
+      <div class="col-6 card">
+        <h3>Feature Importance</h3>
+        <div class="muted small" style="margin-bottom: 1rem;">Top predictive features (Permutation Importance).</div>
+        <div id="featChart" class="chart-container"></div>
+      </div>
+
+      <div class="col-6 card">
+        <h3>Global Causal Effects</h3>
+        <div class="muted small" style="margin-bottom: 1rem;">Average impact of +1 stat increase on OVR across all
+          players.</div>
+        <div id="causalChart" class="chart-container"></div>
+      </div>
+    </div>
+
+    <!-- Section: Performance -->
+    <div class="dashboard-grid">
+      <div class="section-header">
+        <div class="section-title">🎯 Model Diagnostics</div>
+        <div class="tiny muted">Reliability & Errors</div>
+      </div>
+
+      <div class="col-6 card">
+        <h3>Actual vs Predicted</h3>
+        <div class="muted small" style="margin-bottom: 1rem;">Diagonal = Perfect prediction.</div>
+        <div id="scatterChart" class="chart-container"></div>
+      </div>
+
+      <div class="col-6 card">
+        <h3>Residual Distribution</h3>
+        <div class="muted small" style="margin-bottom: 1rem;">Error spread (Actual - Predicted). Centered at 0 is ideal.
+        </div>
+        <div id="histChart" class="chart-container"></div>
+      </div>
+    </div>
+
+    <!-- Section: Fairness -->
+    <div class="dashboard-grid">
+      <div class="section-header">
+        <div class="section-title">⚖️ Fairness & Bias</div>
+        <div class="tiny muted">Performance across cohorts</div>
+      </div>
+
+      <div class="col-6 card">
+        <h3>RMSE by Position</h3>
+        <div id="posChart" style="height: 250px;"></div>
+      </div>
+      <div class="col-6 card">
+        <h3>RMSE by Gender</h3>
+        <div id="genderChart" style="height: 250px;"></div>
       </div>
     </div>
 
     <!-- Tables -->
-    <div class="grid">
-      <div class="col-span-6 card">
-        <h3 style="margin-bottom: 1rem; color: var(--positive);">Top Underrated (Hidden Gems)</h3>
+    <div class="dashboard-grid">
+      <div class="col-6 card">
+        <h3 style="color: var(--positive);">💎 Hidden Gems (Underrated)</h3>
+        <div class="muted small" style="margin-bottom:1rem;">Players performing better than their rating implies.</div>
         <div style="overflow-x: auto;">
           <table class="table-premium">
             <thead>
               <tr>
                 <th>Player</th>
                 <th>Pos</th>
-                <th>League</th>
-                <th>Residual</th>
+                <th>Res</th>
               </tr>
             </thead>
             <tbody id="underratedBody"></tbody>
           </table>
         </div>
       </div>
-      <div class="col-span-6 card">
-        <h3 style="margin-bottom: 1rem; color: var(--negative);">Top Overrated (Overpriced)</h3>
+      <div class="col-6 card">
+        <h3 style="color: var(--negative);">📉 Overrated</h3>
+        <div class="muted small" style="margin-bottom:1rem;">Players rated higher than their stats suggest.</div>
         <div style="overflow-x: auto;">
           <table class="table-premium">
             <thead>
               <tr>
                 <th>Player</th>
                 <th>Pos</th>
-                <th>League</th>
-                <th>Residual</th>
+                <th>Res</th>
               </tr>
             </thead>
             <tbody id="overratedBody"></tbody>
@@ -120,6 +253,7 @@
         </div>
       </div>
     </div>
+
   </main>
 
   <script>
@@ -127,73 +261,118 @@
     const cssVar = (name) => rootStyle.getPropertyValue(name).trim() || name;
     const fmt = (v, digits = 2) => v === undefined || v === null || isNaN(v) ? '—' : Number(v).toFixed(digits);
 
-    async function loadMetrics() {
-      const res = await fetch('/api/metrics');
-      const text = await res.text();
-      let data = null;
-      try { data = JSON.parse(text); } catch (e) { throw new Error(text); }
-      if (!res.ok || data.error) throw new Error(data.error || 'Failed to load metrics');
-      return data;
-    }
-
-    function renderCards(overall, count) {
-      document.getElementById('rmse').textContent = fmt(overall.rmse);
-      document.getElementById('mae').textContent = fmt(overall.mae);
-      document.getElementById('r2').textContent = fmt(overall.r2, 3);
-      document.getElementById('count').textContent = count ?? '—';
-    }
-
-    function renderPosChart(data) {
-      const el = document.getElementById('posChart');
-      if (!el) return;
-      const chart = echarts.init(el);
-      chart.setOption({
-        textStyle: { fontFamily: 'Inter' },
-        backgroundColor: 'transparent',
-        tooltip: { trigger: 'axis', backgroundColor: 'rgba(20,20,20,0.9)', textStyle: { color: '#fff' } },
-        xAxis: { type: 'value', axisLabel: { color: cssVar('--text-secondary') }, splitLine: { lineStyle: { color: cssVar('--panel-border') } } },
-        yAxis: { type: 'category', data: data.map(d => d.Position), axisLabel: { color: cssVar('--text-primary') } },
-        series: [{
-          type: 'bar',
-          data: data.map(d => d.rmse),
-          itemStyle: { color: cssVar('--accent-cyan'), borderRadius: [0, 4, 4, 0] },
-          label: { show: true, position: 'right', color: cssVar('--text-primary'), formatter: ({ value }) => fmt(value) }
-        }],
-        grid: { left: 50, right: 30, top: 20, bottom: 30 }
-      });
-      window.addEventListener('resize', () => chart.resize());
-    }
-
-    function renderGenderChart(data) {
-      const el = document.getElementById('genderChart');
-      const chart = echarts.init(el);
-      chart.setOption({
-        textStyle: { fontFamily: 'Inter' },
-        backgroundColor: 'transparent',
-        tooltip: { trigger: 'axis', backgroundColor: 'rgba(20,20,20,0.9)', textStyle: { color: '#fff' } },
-        xAxis: { type: 'category', data: data.map(d => d.GENDER || 'N/A'), axisLabel: { color: cssVar('--text-primary') } },
-        yAxis: { type: 'value', axisLabel: { color: cssVar('--text-secondary') }, splitLine: { lineStyle: { color: cssVar('--panel-border') } } },
-        series: [{ type: 'bar', data: data.map(d => d.rmse), itemStyle: { color: cssVar('--accent-violet'), borderRadius: [4, 4, 0, 0] } }],
-        grid: { left: 40, right: 10, top: 20, bottom: 30 }
-      });
-      window.addEventListener('resize', () => chart.resize());
-    }
-
-    function renderHist(hist) {
-      const el = document.getElementById('histChart');
-      const chart = echarts.init(el);
-      const centers = [];
-      for (let i = 0; i < hist.counts.length; i++) {
-        centers.push((hist.bins[i] + hist.bins[i + 1]) / 2);
+    // --- API Calls ---
+    async function fetchAPI(endpoint) {
+      try {
+        const res = await fetch(endpoint);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      } catch (e) {
+        console.error(`Failed to fetch ${endpoint}`, e);
+        return null;
       }
+    }
+
+    async function init() {
+      // Parallel Fetch
+      const [metrics, modelMeta, importances, causal] = await Promise.all([
+        fetchAPI('/api/metrics'),
+        fetchAPI('/api/model_meta'),
+        fetchAPI('/api/feature_importance?limit=15'),
+        fetchAPI('/api/causal')
+      ]);
+
+      if (metrics) {
+        renderKPIs(metrics);
+        renderScatter(metrics.scatter);
+        renderResidualHist(metrics.scatter);
+        renderFairness(metrics.by_position, metrics.by_gender);
+        renderTables(metrics.underrated, metrics.overrated);
+      }
+
+      if (modelMeta) renderModelMeta(modelMeta);
+      if (importances) renderImportances(importances.features);
+      if (causal) renderCausal(causal.effects);
+    }
+
+    // --- Renderers ---
+
+    function renderKPIs(data) {
+      document.getElementById('rmse').textContent = fmt(data.overall.rmse);
+      document.getElementById('mae').textContent = fmt(data.overall.mae);
+      document.getElementById('r2').textContent = fmt(data.overall.r2, 3);
+
+      // Count total from scatter or passed count
+      // The API returns 'hist' with counts, we can sum them
+      const count = data.hist?.counts?.reduce((a, b) => a + b, 0) || 0;
+      document.getElementById('count').textContent = count.toLocaleString();
+    }
+
+    function renderModelMeta(data) {
+      document.getElementById('modelArch').textContent = data.best_model || 'Unknown';
+      document.getElementById('modelOpt').textContent = `${data.trials} trials driven by Optuna`;
+      document.getElementById('modelSeed').textContent = `Seed: ${data.random_state}`;
+    }
+
+    function renderImportances(features) {
+      const el = document.getElementById('featChart');
+      const chart = echarts.init(el);
+      if (!features || !features.length) return;
+
+      // Sort descending
+      features.sort((a, b) => a.importance_mean - b.importance_mean);
+
+      const names = features.map(f => f.feature.replace(/^(num__|cat__)/, ''));
+      const values = features.map(f => f.importance_mean);
+
       chart.setOption({
-        textStyle: { fontFamily: 'Inter' },
         backgroundColor: 'transparent',
-        tooltip: { trigger: 'axis', backgroundColor: 'rgba(20,20,20,0.9)', textStyle: { color: '#fff' } },
-        xAxis: { type: 'category', data: centers.map(v => v.toFixed(0)), axisLabel: { color: cssVar('--text-primary') } },
-        yAxis: { type: 'value', axisLabel: { color: cssVar('--text-secondary') }, splitLine: { lineStyle: { color: cssVar('--panel-border') } } },
-        series: [{ type: 'bar', data: hist.counts, itemStyle: { color: cssVar('--positive'), borderRadius: [4, 4, 0, 0] } }],
-        grid: { left: 40, right: 10, top: 20, bottom: 30 }
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+        grid: { left: '3%', right: '4%', bottom: '3%', top: '3%', containLabel: true },
+        xAxis: { type: 'value', splitLine: { show: false } },
+        yAxis: { type: 'category', data: names, axisLabel: { color: cssVar('--text-secondary') }, axisLine: { show: false }, axisTick: { show: false } },
+        series: [
+          {
+            type: 'bar',
+            data: values,
+            itemStyle: { color: cssVar('--accent-cyan'), borderRadius: [0, 4, 4, 0] },
+            barWidth: '60%'
+          }
+        ]
+      });
+      window.addEventListener('resize', () => chart.resize());
+    }
+
+    function renderCausal(effects) {
+      const el = document.getElementById('causalChart');
+      const chart = echarts.init(el);
+      if (!effects || !effects.length) return;
+
+      // Show top 10 positive effects
+      const sorted = effects.sort((a, b) => b.per_unit_effect - a.per_unit_effect).slice(0, 10).reverse(); // reverse for horizontal bar
+      const names = sorted.map(e => e.feature);
+      const values = sorted.map(e => e.per_unit_effect);
+
+      chart.setOption({
+        backgroundColor: 'transparent',
+        tooltip: { trigger: 'axis', formatter: '{b}: +{c} OVR per unit' },
+        grid: { left: '3%', right: '4%', bottom: '3%', top: '3%', containLabel: true },
+        xAxis: { type: 'value', splitLine: { show: false } },
+        yAxis: { type: 'category', data: names, axisLabel: { color: cssVar('--text-secondary') }, axisLine: { show: false }, axisTick: { show: false } },
+        series: [
+          {
+            type: 'bar',
+            data: values,
+            itemStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                { offset: 0, color: cssVar('--accent-violet') },
+                { offset: 1, color: cssVar('--accent-pink') }
+              ]),
+              borderRadius: [0, 4, 4, 0]
+            },
+            barWidth: '60%'
+          }
+        ]
       });
       window.addEventListener('resize', () => chart.resize());
     }
@@ -201,89 +380,129 @@
     function renderScatter(points) {
       const el = document.getElementById('scatterChart');
       const chart = echarts.init(el);
+      const data = points.map(p => [p.pred, p.actual, p.name]); // [x, y, name]
+
       chart.setOption({
-        textStyle: { fontFamily: 'Inter' },
         backgroundColor: 'transparent',
         tooltip: {
-          trigger: 'item',
-          backgroundColor: 'rgba(20,20,20,0.9)',
-          textStyle: { color: '#fff' },
-          formatter: p => `<b>${p.data[2]}</b><br/>Pred ${p.data[0].toFixed(2)} | Actual ${p.data[1].toFixed(2)}`
+          formatter: (p) => `<b>${p.data[2]}</b><br>Pred: ${p.data[0].toFixed(1)}<br>Act: ${p.data[1]}`
         },
-        xAxis: { name: 'Predicted', axisLabel: { color: cssVar('--text-secondary') }, splitLine: { lineStyle: { color: cssVar('--panel-border') } } },
-        yAxis: { name: 'Actual', axisLabel: { color: cssVar('--text-secondary') }, splitLine: { lineStyle: { color: cssVar('--panel-border') } } },
+        grid: { left: '8%', right: '8%', bottom: '12%', top: '12%' },
+        xAxis: { name: 'Predicted', splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } } },
+        yAxis: { name: 'Actual', splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } } },
         series: [{
           type: 'scatter',
-          data: points.map(p => [p.pred, p.actual, p.name]),
-          itemStyle: { color: cssVar('--accent-cyan'), opacity: 0.6 },
-          symbolSize: 8,
-        }],
-        grid: { left: 50, right: 40, top: 20, bottom: 40 }
+          symbolSize: 6,
+          itemStyle: { color: 'rgba(34, 211, 238, 0.6)' },
+          data: data
+        },
+        {
+          type: 'line',
+          data: [[min(data), min(data)], [max(data), max(data)]],
+          showSymbol: false,
+          lineStyle: { type: 'dashed', color: '#666' }
+        }]
       });
       window.addEventListener('resize', () => chart.resize());
     }
 
-    function renderTable(rows, targetId) {
-      const body = document.getElementById(targetId);
-      if (!body) return;
-      body.innerHTML = '';
-      rows.forEach(r => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td style="font-weight:600; color:var(--text-primary)">${r.Name}</td>
-            <td class="muted">${r.Position || ''}</td>
-            <td class="muted">${r.League || ''}</td>
-            <td style="font-weight:700; color:${r.residual >= 0 ? cssVar('--positive') : cssVar('--negative')}">${fmt(r.residual)}</td>
-        `;
-        body.appendChild(tr);
+    function min(data) { return Math.min(...data.map(d => Math.min(d[0], d[1]))); }
+    function max(data) { return Math.max(...data.map(d => Math.max(d[0], d[1]))); }
+
+    function renderResidualHist(points) {
+      const el = document.getElementById('histChart');
+      const chart = echarts.init(el);
+      const residuals = points.map(p => p.actual - p.pred);
+
+      // Simple binning
+      const bins = echarts.jupyter ? null : histogram(residuals, 20);
+
+      chart.setOption({
+        backgroundColor: 'transparent',
+        tooltip: { trigger: 'axis' },
+        grid: { left: '8%', right: '8%', bottom: '12%', top: '12%' },
+        xAxis: { type: 'category', data: bins.labels, axisLabel: { color: '#888' } },
+        yAxis: { type: 'value', splitLine: { show: false } },
+        series: [{
+          type: 'bar',
+          data: bins.counts,
+          itemStyle: { color: cssVar('--accent-emerald') },
+          barWidth: '95%'
+        }]
       });
+      window.addEventListener('resize', () => chart.resize());
     }
 
-    function renderAutoInsights(data) {
-      const el = document.getElementById('insightList');
-      if (!el) return;
-      const items = [];
-      if (data.model_meta && data.model_meta.best_model) {
-        items.push(`Current champion model: <span class="pill active">${data.model_meta.best_model}</span> (MAE ${fmt(data.model_meta.mae)}).`);
+    // Helper histogram function since we don't have numpy
+    function histogram(data, binCount) {
+      const min = Math.min(...data);
+      const max = Math.max(...data);
+      const step = (max - min) / binCount;
+      const counts = new Array(binCount).fill(0);
+      const labels = [];
+
+      for (let i = 0; i < binCount; i++) {
+        labels.push((min + i * step).toFixed(1));
       }
-      if (data.by_position?.length) {
-        const best = data.by_position.reduce((a, b) => a.rmse <= b.rmse ? a : b);
-        const worst = data.by_position.reduce((a, b) => a.rmse >= b.rmse ? a : b);
-        items.push(`Best calibration: <span class="pill positive">${best.Position}</span> (RMSE ${fmt(best.rmse)}).`);
-        items.push(`Needs attention: <span class="pill negative">${worst.Position}</span> (RMSE ${fmt(worst.rmse)}).`);
-      }
-      if (data.by_gender?.length > 1) {
-        const sorted = [...data.by_gender].sort((a, b) => a.rmse - b.rmse);
-        const spread = sorted[sorted.length - 1].rmse - sorted[0].rmse;
-        items.push(`Gender RMSE gap: ${fmt(spread)}. ${spread > 1 ? '<span style="color:var(--warning)">High bias risk.</span>' : 'Acceptable range.'}`);
-      }
-      if (data.scatter?.length) {
-        const residuals = data.scatter.map(p => p.actual - p.pred);
-        const meanRes = residuals.reduce((a, b) => a + b, 0) / residuals.length;
-        items.push(`Global bias: ${fmt(meanRes)}. ${Math.abs(meanRes) > 0.5 ? '<span style="color:var(--warning)">Significant systematic error.</span>' : 'Well centered.'}`);
-      }
-      if (!items.length) {
-        el.innerHTML = '<li>No significant insights found in this sample.</li>';
-        return;
-      }
-      el.innerHTML = items.map(t => `<li style="margin-bottom:8px;">${t}</li>`).join('');
+
+      data.forEach(v => {
+        const idx = Math.min(Math.floor((v - min) / step), binCount - 1);
+        counts[idx]++;
+      });
+      return { counts, labels };
     }
 
-    (async function init() {
-      try {
-        const data = await loadMetrics();
-        renderCards(data.overall, data.scatter?.length);
-        renderPosChart(data.by_position || []);
-        renderGenderChart(data.by_gender || []);
-        renderHist(data.hist || { counts: [], bins: [] });
-        renderScatter(data.scatter || []);
-        renderTable(data.underrated || [], 'underratedBody');
-        renderTable(data.overrated || [], 'overratedBody');
-        renderAutoInsights(data);
-      } catch (err) {
-        document.body.innerHTML = `<div style="padding:40px; text-align:center; color:var(--negative);">${err.message}</div>`;
+    function renderFairness(posData, genderData) {
+      // Postion Chart
+      const posEl = document.getElementById('posChart');
+      if (posData && posEl) {
+        const chart = echarts.init(posEl);
+        const sorted = posData.sort((a, b) => a.rmse - b.rmse);
+        chart.setOption({
+          backgroundColor: 'transparent',
+          tooltip: { trigger: 'axis' },
+          grid: { bottom: 20, top: 10, left: 10, right: 20, containLabel: true },
+          xAxis: { type: 'value', splitLine: { show: false } },
+          yAxis: { type: 'category', data: sorted.map(d => d.Position), axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#888' } },
+          series: [{ type: 'bar', data: sorted.map(d => d.rmse), itemStyle: { color: '#64748b' } }]
+        });
+        window.addEventListener('resize', () => chart.resize());
       }
-    })();
+
+      // Gender Chart
+      const genEl = document.getElementById('genderChart');
+      if (genderData && genEl) {
+        const chart = echarts.init(genEl);
+        chart.setOption({
+          backgroundColor: 'transparent',
+          tooltip: { trigger: 'axis' },
+          grid: { bottom: 20, top: 10, left: 10, right: 20, containLabel: true },
+          xAxis: { type: 'value', splitLine: { show: false } },
+          yAxis: { type: 'category', data: genderData.map(d => d.GENDER || 'N/A'), axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#888' } },
+          series: [{ type: 'bar', data: genderData.map(d => d.rmse), itemStyle: { color: '#8b5cf6' }, barWidth: 30 }]
+        });
+        window.addEventListener('resize', () => chart.resize());
+      }
+    }
+
+    function renderTables(underrated, overrated) {
+      const fill = (id, data) => {
+        const el = document.getElementById(id);
+        el.innerHTML = data.slice(0, 5).map(r => `
+                <tr>
+                    <td style="font-weight:600;">${r.Name}</td>
+                    <td class="muted small">${r.Position}</td>
+                    <td style="font-weight:700; color:${r.residual > 0 ? 'var(--positive)' : 'var(--negative)'}">${r.residual > 0 ? '+' : ''}${r.residual.toFixed(2)}</td>
+                </tr>
+            `).join('');
+      };
+      if (underrated) fill('underratedBody', underrated);
+      if (overrated) fill('overratedBody', overrated);
+    }
+
+    // Start
+    init();
+
   </script>
 </body>
 

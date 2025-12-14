@@ -49,10 +49,111 @@
         <h2 style="font-size: 1.1rem; margin-bottom: 0.5rem;">Select Players</h2>
         <div class="muted small" style="margin-bottom: 1rem;">Pick up to 4 players. First two are compared.</div>
 
-        <input id="search" type="text" placeholder="Search by name..." style="margin-bottom: 1rem;" />
+        <div class="search-command-center">
+          <div class="search-bar-row">
+            <input id="search" type="text" placeholder="Search by name..." style="flex:1;" />
+            <button class="btn secondary" id="advToggle"
+              onclick="document.getElementById('advPanel').classList.toggle('open')">
+              Adjust Filters
+            </button>
+          </div>
+
+          <div class="adv-panel" id="advPanel">
+            <div class="adv-grid">
+              <!-- Column 1: Core -->
+              <div class="filter-group">
+                <label class="tiny muted">Position</label>
+                <select id="posFilter">
+                  <option value="">Any</option>
+                </select>
+
+                <label class="tiny muted" style="margin-top:8px;">League</label>
+                <select id="leagueFilter">
+                  <option value="">Any</option>
+                </select>
+
+                <label class="tiny muted" style="margin-top:8px;">Nation</label>
+                <input id="nationFilter" type="text" placeholder="e.g. Brazil" />
+              </div>
+
+              <!-- Column 2: Physical -->
+              <div class="filter-group">
+                <label class="tiny muted">Age Range</label>
+                <div class="range-row">
+                  <input id="minAge" type="number" placeholder="15" class="small-input" />
+                  <span class="muted">-</span>
+                  <input id="maxAge" type="number" placeholder="50" class="small-input" />
+                </div>
+
+                <label class="tiny muted" style="margin-top:8px;">Height (cm)</label>
+                <div class="range-row">
+                  <input id="minHeight" type="number" placeholder="0" class="small-input" />
+                  <span class="muted">-</span>
+                  <input id="maxHeight" type="number" placeholder="250" class="small-input" />
+                </div>
+
+                <label class="tiny muted" style="margin-top:8px;">Weight (kg)</label>
+                <div class="range-row">
+                  <input id="minWeight" type="number" placeholder="0" class="small-input" />
+                  <span class="muted">-</span>
+                  <input id="maxWeight" type="number" placeholder="150" class="small-input" />
+                </div>
+              </div>
+
+              <!-- Column 3: Technical -->
+              <div class="filter-group">
+                <label class="tiny muted">Min OVR</label>
+                <input id="ovrRange" type="range" min="40" max="99" value="40"
+                  oninput="document.getElementById('ovrLabel').textContent=this.value" />
+                <div class="tiny text-gradient" id="ovrLabel" style="text-align:right;">40</div>
+
+                <label class="tiny muted" style="margin-top:8px;">Min Weak Foot</label>
+                <div class="star-rating">
+                  <select id="minWf">
+                    <option value="1">1+</option>
+                    <option value="2">2+</option>
+                    <option value="3">3+</option>
+                    <option value="4">4+</option>
+                    <option value="5">5 ★</option>
+                  </select>
+                </div>
+
+                <label class="tiny muted" style="margin-top:8px;">Min Skill Moves</label>
+                <div class="star-rating">
+                  <select id="minSm">
+                    <option value="1">1+</option>
+                    <option value="2">2+</option>
+                    <option value="3">3+</option>
+                    <option value="4">4+</option>
+                    <option value="5">5 ★</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Column 4: Traits -->
+              <div class="filter-group">
+                <label class="tiny muted">PlayStyle (Tag)</label>
+                <input id="playStyleFilter" type="text" placeholder="e.g. Finesse, Quick Step" />
+
+                <label class="tiny muted" style="margin-top:8px;">Gender</label>
+                <select id="genderFilter">
+                  <option value="">Any</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
+
+                <div style="margin-top:auto; padding-top:12px; display:flex; gap:8px;">
+                  <button class="btn small" style="flex:1;" id="applyFilters">Apply</button>
+                  <button class="btn secondary small" id="clearFilters">Reset</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <div id="selectedChips"
           style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; min-height: 32px;"></div>
+        <div class="muted tiny" style="margin-bottom: 0.75rem;">Pick players, then drag these chips onto the pitch.</div>
 
         <div id="playerList"></div>
 
@@ -113,6 +214,46 @@
 
         <div id="extraComparisons"
           style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1rem;">
+        </div>
+      </div>
+    </div>
+
+    <!-- Formation Lab -->
+    <div class="card formation-lab">
+      <div class="formation-header">
+        <div>
+          <div class="tiny muted">Formation Lab</div>
+          <h3 style="margin: 0.2rem 0;">Interactive Builder</h3>
+          <div class="muted small">Drag players onto the pitch. Powered by model predictions and similarity chemistry.
+          </div>
+        </div>
+        <div class="formation-controls">
+          <div>
+            <label class="tiny muted">Formation</label>
+            <select id="formationSelect">
+              <option value="433">4-3-3</option>
+              <option value="442">4-4-2</option>
+              <option value="352">3-5-2</option>
+            </select>
+          </div>
+          <button class="btn secondary" id="clearFormation">Clear</button>
+          <button class="btn" id="analyzeFormation">Analyze Formation</button>
+        </div>
+      </div>
+
+      <div class="formation-body">
+        <div class="pitch" id="pitch"></div>
+        <div class="formation-sidebar">
+          <div class="mini-metric">
+            <div class="tiny muted">Team Strength</div>
+            <div class="value" id="teamStrength">—</div>
+          </div>
+          <div class="mini-metric">
+            <div class="tiny muted">Chemistry</div>
+            <div class="value" id="chemistryScore">—</div>
+            <div class="muted tiny" id="chemistryHint"></div>
+          </div>
+          <div id="formationSuggestions" class="muted small">Drop players to get AI-backed fit scores.</div>
         </div>
       </div>
     </div>

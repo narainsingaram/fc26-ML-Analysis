@@ -24,6 +24,7 @@ from rating_engine.torch_predict import load_torch_predictor  # noqa: E402
 from rating_engine.quantile_tf import load_quantile_predictor  # noqa: E402
 import json
 import json
+import numpy as np
 
 app = Flask(__name__, static_folder="frontend", static_url_path="")
 
@@ -110,6 +111,22 @@ def get_model_meta():
         except Exception:
             payload.setdefault("leaderboard_error", "could not read model_leaderboard.json")
     return payload
+
+
+@lru_cache()
+def get_pred_cache():
+    """Cache model predictions for all players for fast formation analysis and suggestions."""
+    cfg = get_config()
+    raw = get_data()
+    model = get_model()
+    df_clean = clean_dataframe(raw, cfg)
+    X = df_clean.drop(columns=[cfg.target], errors="ignore")
+    preds = model.predict(X)
+    id_series = raw.loc[df_clean.index, "ID"]
+    cache = {}
+    for pid, pred in zip(id_series, preds):
+        cache[int(pid)] = float(pred)
+    return cache
 
 
 def build_versatility_lookup(raw_df: pd.DataFrame, cleaned_df: pd.DataFrame) -> dict[int, dict]:
@@ -243,19 +260,104 @@ def predict_with_adjustments(player_id: int, adjustments: dict) -> dict:
 @app.route("/api/players")
 def list_players():
     try:
-        limit = int(request.args.get("limit", 400))
+        # 1. Parsing Params
+        limit = int(request.args.get("limit", 100))
         search = request.args.get("search", "").lower().strip()
+        sort_by = request.args.get("sort", "ovr_desc")  # ovr_desc, age_asc, etc.
+        
+        # Ranges
+        min_ovr = int(request.args.get("min_ovr", 0))
+        max_ovr = int(request.args.get("max_ovr", 99))
+        min_age = int(request.args.get("min_age", 15))
+        max_age = int(request.args.get("max_age", 50))
+        min_height = int(request.args.get("min_height", 0))
+        max_height = int(request.args.get("max_height", 250))
+        min_weight = int(request.args.get("min_weight", 0))
+        max_weight = int(request.args.get("max_weight", 150))
+        
+        # Skills
+        min_wf = int(request.args.get("min_wf", 1))
+        min_sm = int(request.args.get("min_sm", 1))
+        
+        # Categorical
+        pos = request.args.get("position", "").strip()
+        league = request.args.get("league", "").strip()
+        nation = request.args.get("nation", "").strip()
+        playstyle = request.args.get("playstyle", "").lower().strip()
+        
         df = get_data()
-        cols = ["ID", "Name", "Position", "OVR", "Team", "League", "GENDER", "card"]
-        subset = df[cols].copy()
+        
+        # 2. Apply Filters
+        mask = pd.Series(True, index=df.index)
+        
+        # OVR
+        mask &= (df["OVR"] >= min_ovr) & (df["OVR"] <= max_ovr)
+        
+        # Search
         if search:
-            subset = subset[subset["Name"].str.lower().str.contains(search)]
-        subset = subset.sort_values(by="OVR", ascending=False).head(limit)
-        players = subset.to_dict(orient="records")
+            mask &= df["Name"].str.lower().str.contains(search)
+            
+        # Position (exact match or comma-list)
+        if pos and pos.lower() != "any":
+            # Handle multi-select like "ST,CF"
+            pos_list = [p.strip() for p in pos.split(",")]
+            mask &= df["Position"].isin(pos_list)
+            
+        # League / Nation
+        if league:
+            mask &= (df["League"] == league)
+        if nation:
+            mask &= (df["Nation"] == nation)
+            
+        # Physical
+        if min_age > 15 or max_age < 50:
+            mask &= (df["Age"] >= min_age) & (df["Age"] <= max_age)
+        if min_height > 0 or max_height < 250:
+            # use height_cm
+            mask &= (df["height_cm"] >= min_height) & (df["height_cm"] <= max_height)
+        if min_weight > 0 or max_weight < 150:
+            # use weight_kg
+            mask &= (df["weight_kg"] >= min_weight) & (df["weight_kg"] <= max_weight)
+            
+        # Skills
+        if min_wf > 1:
+            mask &= (df["Weak foot"] >= min_wf)
+        if min_sm > 1:
+            mask &= (df["Skill moves"] >= min_sm)
+            
+        # PlayStyle (text match)
+        if playstyle:
+            # 'play style' column
+            mask &= df["play style"].str.lower().str.contains(playstyle, na=False)
+
+        subset = df[mask].copy()
+        
+        # 3. Sorting
+        if sort_by == "ovr_desc":
+            subset = subset.sort_values(by="OVR", ascending=False)
+        elif sort_by == "ovr_asc":
+            subset = subset.sort_values(by="OVR", ascending=True)
+        elif sort_by == "age_asc":
+            subset = subset.sort_values(by="Age", ascending=True)
+        elif sort_by == "pot_desc": # potential proxy
+            # Reuse logic? For now just sort OVR
+            subset = subset.sort_values(by="OVR", ascending=False)
+            
+        subset = subset.head(limit)
+        
+        # 4. Response
+        # Return expanded fields for display
+        cols = [
+            "ID", "Name", "Position", "OVR", "Team", "League", "Nation", "GENDER", 
+            "Age", "height_cm", "weight_kg", "Weak foot", "Skill moves", "play style", "card"
+        ]
+        # select only existing cols
+        final_cols = [c for c in cols if c in subset.columns]
+        players = subset[final_cols].to_dict(orient="records")
         return jsonify({"players": players, "count": len(players)})
+
     except Exception as exc:  # pylint: disable=broad-except
         return jsonify({"error": str(exc)}), 500
-
 
 @app.route("/api/metrics")
 def metrics():
@@ -356,6 +458,186 @@ def model_meta():
     if not data:
         return jsonify({"error": "Model metadata not available"}), 404
     return jsonify(data)
+
+
+@app.route("/api/feature_importance")
+def feature_importance():
+    """Return permutation importances saved during training."""
+    path = Path("artifacts/feature_importance.csv")
+    if not path.exists():
+        return jsonify({"error": "feature_importance.csv not found; run training first."}), 404
+    try:
+        import pandas as pd
+    except ImportError:
+        return jsonify({"error": "pandas not available"}), 500
+    try:
+        df = pd.read_csv(path)
+    except Exception as exc:  # pylint: disable=broad-except
+        return jsonify({"error": str(exc)}), 500
+    limit = int(request.args.get("limit", 30))
+    df = df.head(limit)
+    return jsonify({"features": df.to_dict(orient="records")})
+
+
+def _fit_penalty(player_pos: str, target_pos: str) -> tuple[float, str]:
+    """Penalty (negative) for playing out of position plus label."""
+    if not player_pos or not target_pos:
+        return 0.0, "Unknown fit"
+    # Normalize target to base pos (strip trailing digits for duplicate slots)
+    base_target = str(target_pos).rstrip("0123456789")
+    if player_pos == base_target:
+        return 0.0, "Natural fit"
+    player_group = map_position_group(player_pos)
+    target_group = map_position_group(base_target)
+    if player_group == target_group:
+        return -1.0, "Same line"
+    return -3.0, "Off line"
+
+
+def _predict_for_ids(ids):
+    cache = get_pred_cache()
+    return {pid: cache.get(pid) for pid in ids}
+
+
+def _suggest_for_position(pos: str, top_k: int = 5):
+    base_pos = str(pos).rstrip("0123456789")
+    raw = get_data()
+    preds = get_pred_cache()
+    df = raw.copy()
+    df["predicted"] = df["ID"].apply(lambda x: preds.get(int(x), None))
+    # Prioritize exact position, then same group.
+    exact = df[df["Position"] == base_pos]
+    if len(exact) < top_k:
+        group = map_position_group(base_pos)
+        extra = df[df["Position"].apply(map_position_group) == group]
+        df = pd.concat([exact, extra]).drop_duplicates(subset=["ID"])
+    else:
+        df = exact
+    df = df.dropna(subset=["predicted"])
+    df = df.sort_values(by="predicted", ascending=False).head(top_k)
+    suggestions = []
+    for _, row in df.iterrows():
+        penalty, fit = _fit_penalty(row["Position"], pos)
+        suggestions.append(
+            {
+                "id": int(row["ID"]),
+                "name": row.get("Name"),
+                "position": row.get("Position"),
+                "league": row.get("League"),
+                "team": row.get("Team"),
+                "predicted_ovr": float(row["predicted"]),
+                "adjusted_ovr": float(row["predicted"] + penalty),
+                "fit": fit,
+            }
+        )
+    return suggestions
+
+
+def _chemistry_score(player_ids):
+    try:
+        index = get_similarity_index()
+    except Exception:
+        return None, None
+    sims = []
+    weakest = None
+    weakest_mean = None
+    for pid in player_ids:
+        try:
+            matches = index.query(pid, top_k=len(player_ids))
+            # Filter to those in the team
+            filtered = [m for m in matches if m["id"] in player_ids and m["id"] != pid]
+            vals = [m["similarity"] for m in filtered]
+            if vals:
+                mean_sim = float(np.mean(vals))
+                sims.extend(vals)
+                if weakest_mean is None or mean_sim < weakest_mean:
+                    weakest_mean = mean_sim
+                    weakest = pid
+        except Exception:
+            continue
+    if not sims:
+        return None, None
+    return float(np.mean(sims) * 100), weakest
+
+
+@app.route("/api/formation/analyze", methods=["POST"])
+def formation_analyze():
+    payload = request.get_json(silent=True) or {}
+    formation = payload.get("formation") or []
+    assignments = payload.get("assignments") or {}
+    if not formation or not isinstance(formation, list):
+        return jsonify({"error": "formation must be a list of positions"}), 400
+
+    raw = get_data()
+    preds = get_pred_cache()
+    results = []
+    filled_preds = []
+    assigned_ids = []
+
+    for pos in formation:
+        slot = {"position": pos}
+        pid = assignments.get(pos)
+        if pid is not None:
+            try:
+                pid = int(pid)
+            except Exception:
+                return jsonify({"error": f"Invalid player id for {pos}"}), 400
+            row = raw[raw["ID"] == pid]
+            if row.empty:
+                return jsonify({"error": f"Player {pid} not found"}), 404
+            row = row.iloc[0]
+            base_pred = preds.get(pid)
+            if base_pred is None:
+                base_pred = float(row.get("OVR", 0))
+            penalty, fit_label = _fit_penalty(row.get("Position"), pos)
+            adj = base_pred + penalty
+            slot.update(
+                {
+                    "player_id": pid,
+                    "name": row.get("Name"),
+                    "position": row.get("Position"),
+                    "team": row.get("Team"),
+                    "league": row.get("League"),
+                    "predicted_ovr": base_pred,
+                    "adjusted_ovr": adj,
+                    "fit": fit_label,
+                    "penalty": penalty,
+                }
+            )
+            filled_preds.append(adj)
+            assigned_ids.append(pid)
+        results.append(slot)
+
+    suggestions = {pos: _suggest_for_position(pos) for pos in formation}
+
+    team_strength = float(np.mean(filled_preds)) if filled_preds else None
+    chem_score, weakest = _chemistry_score(assigned_ids)
+    chem_suggestion = None
+    if weakest and assigned_ids:
+        # suggest a replacement similar to weakest but not in team
+        try:
+            idx = get_similarity_index()
+            sim_results = idx.query(weakest, top_k=8)
+            replacement = next((r for r in sim_results if r["id"] not in assigned_ids), None)
+            if replacement:
+                chem_suggestion = {
+                    "replace_player_id": weakest,
+                    "suggested_id": replacement["id"],
+                    "suggested_name": replacement["meta"].get("Name"),
+                    "similarity": replacement["similarity"],
+                }
+        except Exception:
+            pass
+
+    return jsonify(
+        {
+            "slots": results,
+            "team_strength": team_strength,
+            "chemistry_score": chem_score,
+            "chemistry_suggestion": chem_suggestion,
+            "suggestions": suggestions,
+        }
+    )
 
 
 @app.route("/api/predict")
