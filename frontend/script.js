@@ -14,6 +14,13 @@ const heroDelta = document.getElementById('heroDelta');
 const heroDeltaLabel = document.getElementById('heroDeltaLabel');
 const heroCardA = document.getElementById('heroCardA');
 const heroCardB = document.getElementById('heroCardB');
+const versCardA = document.getElementById('versCardA');
+const versCardB = document.getElementById('versCardB');
+const modelNameEl = document.getElementById('modelName');
+const modelMaeEl = document.getElementById('modelMae');
+const modelRmseEl = document.getElementById('modelRmse');
+const modelR2El = document.getElementById('modelR2');
+const modelDetailsEl = document.getElementById('modelDetails');
 const insightPills = document.getElementById('insightPills');
 const driversChartEl = document.getElementById('driversChart');
 const extraComparisons = document.getElementById('extraComparisons');
@@ -68,6 +75,7 @@ async function runSingleAnalysis(id) {
   renderRiskProfile(null); // Clear or showing loading
   extraComparisons.innerHTML = '';
   extraComparisons.innerHTML = '';
+  renderVersatilityFromPlayers(p, null);
   // update previews
   const pa = playerMap.get(String(id));
   if (pa && p.card) pa.card = p.card;
@@ -103,6 +111,7 @@ async function runMultiAnalysis(ids) {
   renderWhatIfControls(data.top_reasons, data.player_b.id || target, data.player_b.predicted_ovr, data.player_a.predicted_ovr);
   fetchQuantiles(data.player_b.id || target);
   renderComposition(data.top_reasons, data.player_a.name);
+  renderVersatilityFromPlayers(data.player_a, data.player_b);
 
   // extra comparisons for 3rd/4th against anchor
   extraComparisons.innerHTML = '';
@@ -204,6 +213,33 @@ async function fetchJson(url, options = {}) {
     throw new Error((data && data.error) || text || 'Request failed');
   }
   return data || {};
+}
+
+function renderModelMeta(data) {
+  if (!modelNameEl) return;
+  if (!data || data.error) {
+    modelNameEl.textContent = 'Model unavailable';
+    modelDetailsEl.textContent = data && data.error ? data.error : 'Train a model to populate.';
+    modelMaeEl.textContent = '—';
+    modelRmseEl.textContent = '—';
+    modelR2El.textContent = '—';
+    return;
+  }
+  modelNameEl.textContent = data.best_model || 'Unknown';
+  modelMaeEl.textContent = data.mae !== undefined ? Number(data.mae).toFixed(3) : '—';
+  modelRmseEl.textContent = data.rmse !== undefined ? Number(data.rmse).toFixed(3) : '—';
+  modelR2El.textContent = data.r2 !== undefined ? Number(data.r2).toFixed(3) : '—';
+  const trialInfo = data.trials ? `${data.trials} trials` : 'sweep ready';
+  modelDetailsEl.textContent = `Auto-selected via boosted sweeps (${trialInfo}).`;
+}
+
+async function loadModelMeta() {
+  try {
+    const data = await fetchJson('/api/model_meta');
+    renderModelMeta(data);
+  } catch (err) {
+    renderModelMeta({ error: err.message });
+  }
 }
 
 async function loadPlayers(search = '') {
@@ -359,6 +395,35 @@ function renderDriversChart(topReasons, delta) {
     }]
   });
   window.addEventListener('resize', () => chart.resize());
+}
+
+function renderVersatilityFromPlayers(playerA, playerB) {
+  const renderCard = (el, label, player) => {
+    if (!el) return;
+    if (!player || !player.versatility) {
+      el.innerHTML = `<div class="tiny muted" style="margin-bottom:4px;">${label}</div><div class="muted small">Select a player to see versatility.</div>`;
+      return;
+    }
+    const v = player.versatility;
+    const altList = v.alt_positions && v.alt_positions.length ? v.alt_positions.join(', ') : 'None';
+    const altGroups = v.alt_groups && v.alt_groups.length ? v.alt_groups.join(', ') : 'None';
+    const dist = (v.role_group_distance !== undefined && v.role_group_distance !== null)
+      ? Number(v.role_group_distance).toFixed(1)
+      : '—';
+    el.innerHTML = `
+      <div class="tiny muted" style="margin-bottom:4px;">${label}</div>
+      <div class="vers-title">${player.name || player.Name || '—'}</div>
+      <div class="vers-meta">
+        <span class="pill ${v.has_alt_role ? 'positive' : ''}">${v.has_alt_role ? 'Has alt role' : 'Single role'}</span>
+        <span class="pill">Alt count: ${v.alt_position_count ?? 0}</span>
+        <span class="pill">Group dist: ${dist}</span>
+      </div>
+      <div class="muted small">Primary group: ${v.primary_group || '—'} • Alt groups: ${altGroups}</div>
+      <div class="muted small">Alt positions: ${altList}</div>
+    `;
+  };
+  renderCard(versCardA, 'Anchor', playerA);
+  renderCard(versCardB, 'Target', playerB);
 }
 
 async function fetchSimilar() {
@@ -1109,6 +1174,8 @@ compareBtn.addEventListener('click', compare);
 similarBtn.addEventListener('click', fetchSimilar);
 anomBtn.addEventListener('click', fetchAnomalies);
 
+renderVersatilityFromPlayers(null, null);
+loadModelMeta();
 loadPlayers().catch(err => {
   errorEl.textContent = err.message;
 });

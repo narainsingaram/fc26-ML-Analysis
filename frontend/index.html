@@ -20,6 +20,28 @@
   </header>
 
   <main>
+    <div class="card model-meta" id="modelMetaCard">
+      <div>
+        <div class="tiny muted" style="margin-bottom: 4px;">Model in Play</div>
+        <div class="model-title" id="modelName">—</div>
+        <div class="muted small" id="modelDetails">Runs Optuna/boosted sweeps to pick the best.</div>
+      </div>
+      <div class="model-metrics">
+        <div>
+          <div class="tiny muted">MAE</div>
+          <div class="value" id="modelMae">—</div>
+        </div>
+        <div>
+          <div class="tiny muted">RMSE</div>
+          <div class="value" id="modelRmse">—</div>
+        </div>
+        <div>
+          <div class="tiny muted">R²</div>
+          <div class="value" id="modelR2">—</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Top Grid: Selection & Comparison -->
     <div class="grid">
       <!-- Player Selection -->
@@ -76,6 +98,17 @@
         <div id="reasoning" class="muted small"
           style="text-align: center; margin-top: 1.5rem; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 8px;">
           Select players to generate natural language analysis.
+        </div>
+
+        <div id="versatilityPanel" class="vers-panel" style="margin-top: 1rem;">
+          <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+            <span class="tiny muted">Versatility & Role Fit</span>
+            <span class="muted small" id="versatilityNote">0 = same role family, 1 = adjacent line</span>
+          </div>
+          <div class="vers-grid">
+            <div class="vers-card" id="versCardA"></div>
+            <div class="vers-card" id="versCardB"></div>
+          </div>
         </div>
 
         <div id="extraComparisons"

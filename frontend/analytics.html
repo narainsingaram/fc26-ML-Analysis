@@ -243,6 +243,9 @@
       const el = document.getElementById('insightList');
       if (!el) return;
       const items = [];
+      if (data.model_meta && data.model_meta.best_model) {
+        items.push(`Current champion model: <span class="pill active">${data.model_meta.best_model}</span> (MAE ${fmt(data.model_meta.mae)}).`);
+      }
       if (data.by_position?.length) {
         const best = data.by_position.reduce((a, b) => a.rmse <= b.rmse ? a : b);
         const worst = data.by_position.reduce((a, b) => a.rmse >= b.rmse ? a : b);

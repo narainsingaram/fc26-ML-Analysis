@@ -146,6 +146,27 @@ main {
   box-shadow: 0 0 30px -5px rgba(34, 211, 238, 0.1);
 }
 
+.model-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+}
+
+.model-metrics {
+  display: flex;
+  gap: 1.25rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.model-title {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--accent-cyan);
+}
+
 .btn {
   background: linear-gradient(135deg, var(--accent-cyan), #06b6d4);
   color: #000;
@@ -236,6 +257,39 @@ input:focus, select:focus {
   justify-content: space-between;
   gap: 2rem;
   padding: 1rem 0;
+}
+
+.vers-panel {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 0.9rem;
+}
+
+.vers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.vers-card {
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.vers-title {
+  font-weight: 800;
+  font-size: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.vers-meta {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 0.4rem 0;
 }
 
 .hero-card {

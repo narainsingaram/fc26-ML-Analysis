@@ -18,7 +18,7 @@ sys.path.append(str(PROJECT_ROOT / "src"))
 from rating_engine.compare import compare_players  # noqa: E402
 from rating_engine.config import DEFAULT_CONFIG, TrainingConfig  # noqa: E402
 from rating_engine.data import load_player_data  # noqa: E402
-from rating_engine.features import clean_dataframe  # noqa: E402
+from rating_engine.features import clean_dataframe, map_position_group, parse_alt_positions  # noqa: E402
 from rating_engine.similarity import build_similarity_index  # noqa: E402
 from rating_engine.torch_predict import load_torch_predictor  # noqa: E402
 from rating_engine.quantile_tf import load_quantile_predictor  # noqa: E402
@@ -94,6 +94,48 @@ def get_anomalies():
         return []
 
 
+@lru_cache()
+def get_model_meta():
+    meta_path = Path("artifacts/model_meta.json")
+    leaderboard_path = Path("artifacts/model_leaderboard.json")
+    payload = {}
+    if meta_path.exists():
+        try:
+            payload.update(json.loads(meta_path.read_text()))
+        except Exception:
+            payload["error"] = "could not read model_meta.json"
+    if leaderboard_path.exists():
+        try:
+            payload["leaderboard"] = json.loads(leaderboard_path.read_text()).get("leaderboard", [])
+        except Exception:
+            payload.setdefault("leaderboard_error", "could not read model_leaderboard.json")
+    return payload
+
+
+def build_versatility_lookup(raw_df: pd.DataFrame, cleaned_df: pd.DataFrame) -> dict[int, dict]:
+    """Return per-player versatility metrics aligned with cleaned features."""
+    lookup: dict[int, dict] = {}
+    for idx, row in cleaned_df.iterrows():
+        raw_row = raw_df.loc[idx] if idx in raw_df.index else None
+        if raw_row is None or raw_row is pd.NA:
+            continue
+        try:
+            player_id = int(raw_row.get("ID"))
+        except Exception:
+            continue
+        alt_positions = parse_alt_positions(raw_row.get("Alternative positions"))
+        alt_groups = sorted({map_position_group(p) for p in alt_positions}) if alt_positions else []
+        lookup[player_id] = {
+            "alt_positions": alt_positions,
+            "alt_position_count": int(row["alt_position_count"]) if "alt_position_count" in row else len(alt_positions),
+            "has_alt_role": bool(row["has_alt_role"]) if "has_alt_role" in row else bool(alt_positions),
+            "role_group_distance": float(row["role_group_distance"]) if "role_group_distance" in row else 0.0,
+            "primary_group": map_position_group(raw_row.get("Position")),
+            "alt_groups": alt_groups,
+        }
+    return lookup
+
+
 def forecast_player(player_id: int):
     cfg = get_config()
     df = get_data()
@@ -154,8 +196,21 @@ def predict_with_adjustments(player_id: int, adjustments: dict) -> dict:
     X_adj = adjusted.drop(columns=[cfg.target], errors="ignore")
     if torch_predictor:
         adj_pred = float(torch_predictor.predict_df(X_adj)[0])
+    # Calculate partial dependence / delta
+    delta = adj_pred - base_pred
+    
+    # Calibration: Anchor to Actual OVR
+    actual_ovr = row.iloc[0].get("OVR")
+    if actual_ovr is not None and not pd.isna(actual_ovr):
+        actual_val = float(actual_ovr)
+        residual = actual_val - base_pred
+        # Apply calibration
+        final_baseline = actual_val
+        final_adjusted = adj_pred + residual
     else:
-        adj_pred = float(model.predict(X_adj)[0])
+        # Fallback if no actual OVR (unlikely for existing players)
+        final_baseline = base_pred
+        final_adjusted = adj_pred
 
     unc_predictor = get_uncertainty_predictor() 
     base_u = None
@@ -176,9 +231,10 @@ def predict_with_adjustments(player_id: int, adjustments: dict) -> dict:
         }
 
     return {
-        "baseline": base_pred,
-        "adjusted": adj_pred,
-        "delta": adj_pred - base_pred,
+        "baseline": final_baseline,
+        "adjusted": final_adjusted,
+        "delta": final_adjusted - final_baseline,
+        "raw_baseline": base_pred, # useful for debugging
         "baseline_uncertainty": fmt_u(base_u),
         "adjusted_uncertainty": fmt_u(adj_u),
     }
@@ -287,10 +343,19 @@ def metrics():
                 "scatter": scatter,
                 "underrated": underrated,
                 "overrated": overrated,
+                "model_meta": get_model_meta(),
             }
         )
     except Exception as exc:  # pylint: disable=broad-except
         return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/model_meta")
+def model_meta():
+    data = get_model_meta()
+    if not data:
+        return jsonify({"error": "Model metadata not available"}), 404
+    return jsonify(data)
 
 
 @app.route("/api/predict")
@@ -310,12 +375,13 @@ def predict_players():
     raw = get_data()
     cfg = get_config()
     model = get_model()
-    df_clean = clean_dataframe(raw, cfg)
-    rows = df_clean[df_clean["ID"].isin(id_list)]
-    if rows.empty:
+    raw_subset = raw[raw["ID"].isin(id_list)]
+    if raw_subset.empty:
         return jsonify({"error": "No players found for ids"}), 404
 
+    rows = clean_dataframe(raw_subset, cfg, drop_null_only=False)
     preds = model.predict(rows.drop(columns=[cfg.target], errors="ignore"))
+    vers_lookup = build_versatility_lookup(raw_subset, rows)
     
     # Uncertainty quantification
     unc_predictor = get_uncertainty_predictor()
@@ -342,6 +408,7 @@ def predict_players():
                 "league": raw_row.get("League"),
                 "card": raw_row.get("card"),
             }
+        item["versatility"] = vers_lookup.get(int(row["ID"]))
         
         u_res = unc_results[idx]
         if u_res:
@@ -389,8 +456,12 @@ def compare():
         return jsonify({"error": str(exc)}), 500
 
     raw_df = get_data()
+    cfg = get_config()
     row_a = raw_df[raw_df["ID"] == player_a_id].iloc[0]
     row_b = raw_df[raw_df["ID"] == player_b_id].iloc[0]
+    subset_raw = raw_df[raw_df["ID"].isin([player_a_id, player_b_id])]
+    cleaned_subset = clean_dataframe(subset_raw, cfg, drop_null_only=False)
+    vers_lookup = build_versatility_lookup(subset_raw, cleaned_subset)
 
     def cast_num(x):
         if x is None:
@@ -410,6 +481,7 @@ def compare():
             "league": row_a.get("League"),
             "card": row_a.get("card"),
             "ovr": cast_num(row_a.get("OVR")),
+            "versatility": vers_lookup.get(player_a_id),
         },
         "player_b": {
             "id": player_b_id,
@@ -420,6 +492,7 @@ def compare():
             "league": row_b.get("League"),
             "card": row_b.get("card"),
             "ovr": cast_num(row_b.get("OVR")),
+            "versatility": vers_lookup.get(player_b_id),
         },
         "ovr_difference": float(result.delta),
         "top_reasons": [
