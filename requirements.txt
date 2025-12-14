@@ -1,0 +1,5 @@
+pandas>=1.5
+scikit-learn>=1.2
+joblib>=1.3
+shap>=0.50
+flask>=3.0
