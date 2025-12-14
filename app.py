@@ -68,6 +68,12 @@ def get_quantile_predictor():
     return load_quantile_predictor(model_dir)
 
 @lru_cache()
+def get_uncertainty_predictor():
+    from rating_engine.uncertainty import load_uncertainty_predictor
+    model_dir = Path("artifacts/quantile_model")
+    return load_uncertainty_predictor(model_dir)
+
+@lru_cache()
 def get_causal_effects():
     path = Path("artifacts/causal_effects.json")
     if not path.exists():
@@ -151,10 +157,30 @@ def predict_with_adjustments(player_id: int, adjustments: dict) -> dict:
     else:
         adj_pred = float(model.predict(X_adj)[0])
 
+    unc_predictor = get_uncertainty_predictor() 
+    base_u = None
+    adj_u = None
+    if unc_predictor:
+        try:
+            base_u = unc_predictor.predict(X_base)[0]
+            adj_u = unc_predictor.predict(X_adj)[0]
+        except Exception:
+            pass
+
+    def fmt_u(u):
+        if not u: return None
+        return {
+            "p10": u.p10, "p90": u.p90, "width": u.interval_width,
+            "is_extrapolating": u.is_extrapolating,
+            "warnings": u.warnings
+        }
+
     return {
         "baseline": base_pred,
         "adjusted": adj_pred,
         "delta": adj_pred - base_pred,
+        "baseline_uncertainty": fmt_u(base_u),
+        "adjusted_uncertainty": fmt_u(adj_u),
     }
 
 
@@ -290,11 +316,23 @@ def predict_players():
         return jsonify({"error": "No players found for ids"}), 404
 
     preds = model.predict(rows.drop(columns=[cfg.target], errors="ignore"))
-    results: list[dict[str, float | str | int]] = []
+    
+    # Uncertainty quantification
+    unc_predictor = get_uncertainty_predictor()
+    unc_results = []
+    if unc_predictor:
+        try:
+            X_unc = rows.drop(columns=[cfg.target], errors="ignore")
+            unc_results = unc_predictor.predict(X_unc)
+        except Exception:
+            unc_results = [None] * len(rows)
+    else:
+        unc_results = [None] * len(rows)
+
+    results: list[dict[str, float | str | int | dict]] = []
     for idx, (_, row) in enumerate(rows.iterrows()):
         raw_row = raw[raw["ID"] == row["ID"]].iloc[0]
-        results.append(
-            {
+        item = {
                 "id": int(row["ID"]),
                 "name": raw_row.get("Name"),
                 "predicted_ovr": float(preds[idx]),
@@ -304,7 +342,27 @@ def predict_players():
                 "league": raw_row.get("League"),
                 "card": raw_row.get("card"),
             }
-        )
+        
+        u_res = unc_results[idx]
+        if u_res:
+            item["uncertainty"] = {
+                "p10": u_res.p10,
+                "p50": u_res.p50,
+                "p90": u_res.p90,
+                "width": u_res.interval_width,
+                "distance": u_res.distance_to_train,
+                "is_extrapolating": u_res.is_extrapolating,
+                "is_high_uncertainty": u_res.is_high_uncertainty,
+                "warnings": u_res.warnings,
+            }
+            # Adjust skepticism flag
+            if u_res.warnings:
+                item["skepticism_flag"] = True
+                item["skepticism_reasons"] = u_res.warnings
+            else:
+                 item["skepticism_flag"] = False
+        
+        results.append(item)
 
     return jsonify({"players": results, "count": len(results)})
 
