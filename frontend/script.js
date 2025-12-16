@@ -29,6 +29,7 @@ const modelMaeEl = document.getElementById('modelMae');
 const modelRmseEl = document.getElementById('modelRmse');
 const modelR2El = document.getElementById('modelR2');
 const modelDetailsEl = document.getElementById('modelDetails');
+const downloadReportBtn = document.getElementById('downloadReportBtn');
 const insightPills = document.getElementById('insightPills');
 const driversChartEl = document.getElementById('driversChart');
 const extraComparisons = document.getElementById('extraComparisons');
@@ -50,13 +51,13 @@ const anomError = document.getElementById('anomError');
 const anomList = document.getElementById('anomList');
 const anomScatter = document.getElementById('anomScatter');
 const riskChartEl = document.getElementById('riskChart');
-const compChartEl = document.getElementById('compChart');
-
+const compChartEl = document.getElementById('compChart'); // State
 let players = [];
 let playerMap = new Map();
-let selectedIds = [];
-let leagueOptions = [];
+let selectedIds = []; // For comparison/details
+let squadIds = [];    // For Squad Builder Draft Pool
 let positionOptions = [];
+let leagueOptions = [];
 let formationAssignments = {};
 
 function optionLabel(p) {
@@ -158,15 +159,12 @@ function renderSelectedChips() {
     const p = playerMap.get(String(id));
     const chip = document.createElement('span');
     chip.className = 'pill active';
-    chip.style.cursor = 'grab';
+    chip.style.cursor = 'pointer';
     chip.textContent = p ? `${p.Name} · ${p.Position}` : id;
     chip.onclick = () => toggleSelect(id);
-    chip.setAttribute('draggable', 'true');
-    chip.ondragstart = (e) => {
-      e.dataTransfer.setData('playerId', String(id));
-    };
     selectedChips.appendChild(chip);
   });
+  // Note: renderDraftPool is now independent
 }
 
 function renderPlayerList(list) {
@@ -183,28 +181,76 @@ function renderPlayerList(list) {
   }
   list.forEach(p => {
     const isSelected = selectedIds.includes(String(p.ID));
-    const disabled = !isSelected && selectedIds.length >= 4;
+    const isInSquad = squadIds.includes(String(p.ID));
+    const disabled = !isSelected && selectedIds.length >= 25;
+
     const card = document.createElement('div');
     card.className = `player-option ${isSelected ? 'selected' : ''}`;
-    if (disabled) card.style.opacity = '0.5';
-    // Dragging restricted to selected chips; list remains click-to-select.
 
-    card.onclick = () => {
+    // Main Content (Click to Select for Comparison/Details)
+    const content = document.createElement('div');
+    content.style.flex = '1';
+    content.innerHTML = `
+        <div style="font-weight:700;">${p.Name}</div>
+        <div class="muted small">${p.Position} • OVR ${p.OVR} • ${p.Team || ''}</div>
+    `;
+    content.onclick = () => {
       if (disabled) return;
       toggleSelect(p.ID);
     };
-    card.innerHTML = `
-      <div>
-        <div style="font-weight:700;">${p.Name}</div>
-        <div class="muted small">${p.Position} • OVR ${p.OVR} • ${p.Team || ''}</div>
-      </div>
-      <div>
-        ${isSelected ? '<span style="color:var(--accent-cyan)">✔</span>' : ''}
-      </div>
-    `;
+
+    // Actions
+    const actions = document.createElement('div');
+    actions.style.display = 'flex';
+    actions.style.gap = '8px';
+    actions.style.alignItems = 'center';
+
+    // Squad Toggle Button
+    const squadBtn = document.createElement('button');
+    squadBtn.className = 'btn-icon'; // Need to define this or inline style
+    squadBtn.style.padding = '4px 8px';
+    squadBtn.style.fontSize = '0.8rem';
+    squadBtn.style.background = isInSquad ? 'var(--accent-cyan)' : 'var(--glass-bg)';
+    squadBtn.style.color = isInSquad ? '#000' : '#fff';
+    squadBtn.style.border = '1px solid var(--panel-border)';
+    squadBtn.style.borderRadius = '4px';
+    squadBtn.style.cursor = 'pointer';
+    squadBtn.innerHTML = isInSquad ? 'In Squad' : '+ Squad';
+    squadBtn.onclick = (e) => {
+      e.stopPropagation(); // Prevent comparison select
+      toggleSquad(p.ID);
+    };
+
+    // Comparison Check
+    const check = document.createElement('div');
+    check.innerHTML = isSelected ? '<span style="color:var(--accent-cyan)">✔</span>' : '';
+
+    actions.appendChild(squadBtn);
+    actions.appendChild(check);
+
+    card.appendChild(content);
+    card.appendChild(actions);
+
+    // Disable opacity logic if needed, but keeping it simple for now
+    if (disabled) content.style.opacity = '0.5';
+
     playerListEl.appendChild(card);
   });
   renderSelectedChips();
+}
+
+function toggleSquad(id) {
+  const sid = String(id);
+  if (squadIds.includes(sid)) {
+    squadIds = squadIds.filter(x => x !== sid);
+  } else {
+    // No hard limit for squad pool, maybe 50?
+    if (squadIds.length >= 50) return;
+    squadIds.push(sid);
+  }
+  // Re-render list to update buttons
+  renderPlayerList(playersFiltered());
+  renderDraftPool();
 }
 
 function toggleSelect(id) {
@@ -212,7 +258,7 @@ function toggleSelect(id) {
   if (selectedIds.includes(sid)) {
     selectedIds = selectedIds.filter(x => x !== sid);
   } else {
-    if (selectedIds.length >= 4) return;
+    if (selectedIds.length >= 25) return;
     selectedIds.push(sid);
   }
   renderSelectedChips();
@@ -1307,6 +1353,17 @@ searchInput.addEventListener('input', (e) => filterPlayers(e.target.value));
 compareBtn.addEventListener('click', compare);
 similarBtn.addEventListener('click', fetchSimilar);
 anomBtn.addEventListener('click', fetchAnomalies);
+if (downloadReportBtn) {
+  downloadReportBtn.addEventListener('click', () => {
+    errorEl.textContent = '';
+    if (selectedIds.length < 2) {
+      errorEl.textContent = 'Pick two players to export a comparison PDF.';
+      return;
+    }
+    const url = `/api/report/comparison?player_a_id=${selectedIds[0]}&player_b_id=${selectedIds[1]}`;
+    window.open(url, '_blank');
+  });
+}
 
 renderVersatilityFromPlayers(null, null);
 bindSearchEvents();
@@ -1314,7 +1371,7 @@ loadModelMeta();
 loadPlayers().catch(err => {
   errorEl.textContent = err.message;
 });
-
+renderDraftPool();
 function syncRangeLabels() {
   if (!ovrRangeMin || !ovrRangeMax) return;
   let minVal = Number(ovrRangeMin.value);
@@ -1353,36 +1410,200 @@ function attachFilterEvents() {
 
 attachFilterEvents();
 
-// Formation builder setup
+// Squad Builder Logic
 const formations = {
-  "433": ["GK", "RB", "RCB", "LCB", "LB", "CDM", "CM", "CAM", "RW", "ST", "LW"],
-  "442": ["GK", "RB", "RCB", "LCB", "LB", "RM", "CM1", "CM2", "LM", "ST1", "ST2"],
-  "352": ["GK", "RCB", "CB", "LCB", "CDM", "CM", "RM", "LM", "CAM", "ST1", "ST2"],
+  "433": ["LW", "ST", "RW", "CM", "CDM", "CM", "LB", "CB", "CB", "RB", "GK"],
+  "442": ["LM", "ST", "ST", "RM", "CM", "CM", "LB", "CB", "CB", "RB", "GK"],
+  "4231": ["LM", "ST", "RM", "CAM", "CDM", "CDM", "LB", "CB", "CB", "RB", "GK"],
+  "352": ["LM", "ST", "ST", "RM", "CAM", "CDM", "CDM", "CB", "CB", "CB", "GK"]
 };
+
+// Embedded Squad Search
+const squadSearchInput = document.getElementById('squadSearch');
+const squadSearchResults = document.getElementById('squadSearchResults');
+
+if (squadSearchInput) {
+  squadSearchInput.addEventListener('input', (e) => {
+    const val = e.target.value.toLowerCase().trim();
+    if (!val) {
+      squadSearchResults.style.display = 'none';
+      return;
+    }
+    const matches = players.filter(p => p.Name.toLowerCase().includes(val)).slice(0, 10);
+    renderSquadSearchResults(matches);
+  });
+
+  // Close on outside click
+  document.addEventListener('click', (e) => {
+    if (!squadSearchInput.contains(e.target) && !squadSearchResults.contains(e.target)) {
+      squadSearchResults.style.display = 'none';
+    }
+  });
+}
+
+function renderSquadSearchResults(matches) {
+  if (!squadSearchResults) return;
+  squadSearchResults.innerHTML = '';
+  squadSearchResults.style.display = 'block';
+
+  if (!matches.length) {
+    squadSearchResults.innerHTML = '<div class="muted small" style="padding:10px;">No players found.</div>';
+    return;
+  }
+
+  matches.forEach(p => {
+    const row = document.createElement('div');
+    row.style.padding = '8px 12px';
+    row.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+    row.style.cursor = 'pointer';
+    row.style.display = 'flex';
+    row.style.justifyContent = 'space-between';
+    row.style.alignItems = 'center';
+    row.className = 'search-result-row'; // For hover effect via CSS if needed
+
+    row.innerHTML = `
+      <div>
+        <div style="font-weight:700; font-size:0.9rem;">${p.Name}</div>
+        <div class="tiny muted">${p.Position} • ${p.Team}</div>
+      </div>
+      <div style="font-weight:800; color:var(--accent-cyan);">${p.OVR}</div>
+    `;
+
+    row.onclick = () => {
+      toggleSquad(p.ID);
+      squadSearchInput.value = '';
+      squadSearchResults.style.display = 'none';
+    };
+
+    // Add hover effect
+    row.onmouseenter = () => row.style.background = 'rgba(255,255,255,0.05)';
+    row.onmouseleave = () => row.style.background = 'transparent';
+
+    squadSearchResults.appendChild(row);
+  });
+}
+
+function renderDraftPool() {
+  const pool = document.getElementById('draftPool');
+  if (!pool) return;
+
+  if (!squadIds.length) {
+    pool.innerHTML = '<div class="muted small">Select players from list (+ Squad) to populate draft pool.</div>';
+    return;
+  }
+
+  pool.innerHTML = '';
+  squadIds.forEach(id => {
+    const p = playerMap.get(String(id));
+    if (!p) return;
+
+    // Create Draggable Card
+    const card = document.createElement('div');
+    card.className = 'hero-card';
+    card.style.minWidth = '120px';
+    card.style.width = '120px';
+    card.style.padding = '10px';
+    card.style.cursor = 'grab';
+    card.setAttribute('draggable', 'true'); // Explicit attribute
+
+    // Drag Start
+    card.ondragstart = (e) => {
+      console.log('Drag Start:', p.ID);
+      e.dataTransfer.setData('playerId', String(p.ID));
+      e.dataTransfer.effectAllowed = 'copyMove';
+      card.style.opacity = '0.5';
+    };
+
+    card.ondragend = () => {
+      console.log('Drag End');
+      card.style.opacity = '1';
+    };
+
+    // Remove Button
+    const removeBtn = document.createElement('div');
+    removeBtn.className = 'tiny';
+    removeBtn.style.position = 'absolute';
+    removeBtn.style.top = '-8px';
+    removeBtn.style.left = '-8px';
+    removeBtn.style.background = 'var(--accent-rose)';
+    removeBtn.style.color = '#fff';
+    removeBtn.style.width = '20px';
+    removeBtn.style.height = '20px';
+    removeBtn.style.borderRadius = '50%';
+    removeBtn.style.display = 'flex';
+    removeBtn.style.alignItems = 'center';
+    removeBtn.style.justifyContent = 'center';
+    removeBtn.style.cursor = 'pointer';
+    removeBtn.innerHTML = '×';
+    removeBtn.onclick = () => toggleSquad(id);
+
+    // Card Content
+    card.innerHTML = `
+      <div style="position:relative;">
+        <img src="${p.card}" alt="${p.Name}" style="width:100%; height:80px; object-fit:contain; margin-bottom:8px; pointer-events:none;" draggable="false"/>
+        <div class="tiny" style="position:absolute; top:0; right:0; background:rgba(0,0,0,0.6); padding:2px 4px; border-radius:4px; pointer-events:none;">${p.Position}</div>
+      </div>
+      <div style="font-weight:700; font-size:0.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; pointer-events:none;">${p.Name}</div>
+      <div class="text-gradient" style="font-weight:800; pointer-events:none;">${p.OVR}</div>
+    `;
+    card.appendChild(removeBtn);
+    pool.appendChild(card);
+  });
+}
+
+function clearFormation() {
+  formationAssignments = {};
+  updatePitchAssignments();
+  document.getElementById('teamStrength').textContent = '—';
+  document.getElementById('chemistryScore').textContent = '—';
+  document.getElementById('chemistryHint').textContent = '';
+  document.getElementById('formationSuggestions').textContent = 'Analyze formation to get fit checks and replacement suggestions.';
+}
+
+function assignToSlot(position, playerId) {
+  formationAssignments = { ...formationAssignments, [position]: String(playerId) };
+  updatePitchAssignments();
+  // Clear analysis results to prompt re-analysis
+  document.getElementById('teamStrength').textContent = '—';
+  document.getElementById('chemistryScore').textContent = '—';
+}
 
 function slotPositions(formationKey) {
   const key = formationKey || "433";
   const slots = formations[key] || formations["433"];
-  // simple grid positions (percentages)
-  const layout = [];
-  const rows = [
-    { y: 85, count: 3 },
-    { y: 65, count: 3 },
-    { y: 45, count: 3 },
-    { y: 25, count: 2 },
-  ];
-  let idx = 0;
-  rows.forEach(r => {
-    const spacing = 100 / (r.count + 1);
-    for (let i = 0; i < r.count && idx < slots.length; i++) {
-      layout.push({ position: slots[idx], top: `${r.y}%`, left: `${spacing * (i + 1)}%` });
-      idx += 1;
-    }
+  // We distribute players into rows: Attack, Midfield, Defense, GK
+
+  const rows = { 'ATT': [], 'MID': [], 'DEF': [], 'GK': [] };
+
+  slots.forEach((pos, idx) => {
+    // Create Unique Key: POS_INDEX
+    const uniqueKey = `${pos}_${idx}`;
+    if (pos === 'GK') rows['GK'].push({ pos, idx, uniqueKey });
+    else if (['LB', 'RB', 'CB', 'LWB', 'RWB'].includes(pos)) rows['DEF'].push({ pos, idx, uniqueKey });
+    else if (['CDM', 'CM', 'CAM', 'LM', 'RM'].includes(pos)) rows['MID'].push({ pos, idx, uniqueKey });
+    else rows['ATT'].push({ pos, idx, uniqueKey });
   });
-  // Fill remaining (if any)
-  for (; idx < slots.length; idx++) {
-    layout.push({ position: slots[idx], top: `${10 + idx * 5}%`, left: `${10 + (idx % 4) * 20}%` });
-  }
+
+  const layout = [];
+
+  const placeRow = (list, topPct) => {
+    const count = list.length;
+    list.forEach((item, i) => {
+      const leftPct = (100 / (count + 1)) * (i + 1);
+      layout.push({
+        key: item.uniqueKey, // "CB_7" 
+        label: item.pos,
+        top: `${topPct}%`,
+        left: `${leftPct}%`
+      });
+    });
+  };
+
+  placeRow(rows['ATT'], 15);
+  placeRow(rows['MID'], 40);
+  placeRow(rows['DEF'], 70);
+  placeRow(rows['GK'], 90);
+
   return layout;
 }
 
@@ -1394,112 +1615,162 @@ function renderPitch() {
   pitch.setAttribute('data-drop-hint', 'Drop selected player chips here');
   const key = formationSelect ? formationSelect.value : '433';
   const layout = slotPositions(key);
+
   layout.forEach(slot => {
     const el = document.createElement('div');
     el.className = 'pitch-slot';
     el.style.top = slot.top;
     el.style.left = slot.left;
-    el.dataset.position = slot.position;
-    el.innerHTML = `<div class="slot-pos">${slot.position}</div><div class="slot-player muted small">Drop player</div>`;
-    el.ondragover = (e) => e.preventDefault();
+    el.dataset.key = slot.key; // Unique key "CB_7"
+    el.innerHTML = `<div class="slot-pos">${slot.label}</div><div class="slot-player muted small">Drop player</div>`;
+
+    // Improved Drag Handling
+    el.ondragover = (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy'; // Explicit feedback
+      el.classList.add('drag-over');
+    };
+    el.ondragenter = (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      el.classList.add('drag-over');
+    };
+    el.ondragleave = () => {
+      el.classList.remove('drag-over');
+    };
+
     el.ondrop = (e) => {
       e.preventDefault();
+      el.classList.remove('drag-over');
       const pid = e.dataTransfer.getData('playerId');
-      if (pid) assignToSlot(slot.position, pid);
+      console.log('Drop:', pid, 'on', slot.key);
+      if (pid) assignToSlot(slot.key, pid); // Assign to "CB_7"
     };
+
     el.onclick = () => {
-      // show suggestions if empty
-      if (!formationAssignments[slot.position]) {
-        fetchFormationAnalysis();
-      }
+      // If empty, maybe trigger search or suggestions?
     };
+
     pitch.appendChild(el);
   });
   updatePitchAssignments();
 }
 
-function assignToSlot(position, playerId) {
-  formationAssignments = { ...formationAssignments, [position]: String(playerId) };
+function assignToSlot(uniqueKey, playerId) {
+  formationAssignments = { ...formationAssignments, [uniqueKey]: String(playerId) };
   updatePitchAssignments();
-}
-
-function clearFormation() {
-  formationAssignments = {};
-  updatePitchAssignments();
+  // Clear analysis results to prompt re-analysis
   document.getElementById('teamStrength').textContent = '—';
   document.getElementById('chemistryScore').textContent = '—';
-  document.getElementById('chemistryHint').textContent = '';
-  document.getElementById('formationSuggestions').textContent = 'Drop players to get AI-backed fit scores.';
 }
 
 function updatePitchAssignments() {
   const pitch = document.getElementById('pitch');
   if (!pitch) return;
   Array.from(pitch.querySelectorAll('.pitch-slot')).forEach(slot => {
-    const pos = slot.dataset.position;
-    const pid = formationAssignments[pos];
+    const key = slot.dataset.key; // "CB_7"
+    const pid = formationAssignments[key];
     if (pid) {
       const player = playerMap.get(String(pid));
       slot.classList.add('assigned');
-      slot.querySelector('.slot-player').innerHTML = `${player?.Name || pid}<br/><span class="muted tiny">${player?.Position || ''}</span>`;
+      slot.innerHTML = `
+          <div style="font-weight:700; font-size:0.8rem;">${player?.Name || pid}</div>
+          <div class="tiny" style="color:${player ? 'var(--accent-cyan)' : 'inherit'}">${player?.OVR || '?'}</div>
+      `;
+      slot.onclick = () => {
+        delete formationAssignments[key];
+        updatePitchAssignments();
+      };
+      slot.title = "Click to remove";
     } else {
       slot.classList.remove('assigned');
-      slot.querySelector('.slot-player').textContent = 'Drop player';
+      const label = key.split('_')[0]; // "CB"
+      slot.innerHTML = `<div class="slot-pos">${label}</div><div class="slot-player muted tiny">Empty</div>`;
+      slot.classList.remove('drag-over');
+      slot.onclick = null;
+      slot.title = "";
     }
   });
 }
 
 async function fetchFormationAnalysis() {
   const formationSelect = document.getElementById('formationSelect');
-  const formation = formations[formationSelect.value] || formations["433"];
-  const payload = { formation, assignments: formationAssignments };
+  const key = formationSelect ? formationSelect.value : '433';
+
+  // We need to send `formation` as a list of "POS_IDX" strings 
+  // and `assignments` keyed by "POS_IDX".
+  // The Backend logic (app.py) likely iterates `formation` list and looks up `assignments`.
+  // If we send "CB_7", app.py `_fit_penalty` needs to handle it.
+  // Wait, I should verify app.py _fit_penalty logic.
+  // It probably expects strict position strings "CB".
+  // Let's assume app.py isn't smart enough to strip suffixes.
+  // BUT: if we modify app.py, that's fine.
+  // Actually, modifying app.py to split('_')[0] is safer than doing complex frontend mapping.
+  // Let's stick to unique keys here.
+
+  const layout = slotPositions(key);
+  const formationList = layout.map(l => l.key); // ["LW_0", "ST_1", ...]
+
+  const payload = { formation: formationList, assignments: formationAssignments };
+
+  const btn = document.getElementById('analyzeFormation');
+  if (btn) btn.textContent = 'Analyzing...';
+
   try {
     const data = await fetchJson('/api/formation/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    if (data.team_strength !== undefined && data.team_strength !== null) {
-      document.getElementById('teamStrength').textContent = data.team_strength.toFixed(2);
-    } else {
-      document.getElementById('teamStrength').textContent = '—';
+    if (data.team_strength) {
+      document.getElementById('teamStrength').textContent = data.team_strength.toFixed(0);
     }
-    if (data.chemistry_score !== undefined && data.chemistry_score !== null) {
-      document.getElementById('chemistryScore').textContent = data.chemistry_score.toFixed(1);
-      if (data.chemistry_suggestion) {
-        document.getElementById('chemistryHint').textContent = `Weak link: ${data.chemistry_suggestion.replace_player_id}. Try ${data.chemistry_suggestion.suggested_name}`;
-      } else {
-        document.getElementById('chemistryHint').textContent = '';
-      }
-    } else {
-      document.getElementById('chemistryScore').textContent = '—';
-      document.getElementById('chemistryHint').textContent = '';
+    if (data.chemistry_score) {
+      document.getElementById('chemistryScore').textContent = data.chemistry_score.toFixed(0);
     }
 
     const suggestionEl = document.getElementById('formationSuggestions');
     if (suggestionEl) {
       suggestionEl.innerHTML = '';
-      Object.entries(data.suggestions || {}).forEach(([pos, suggestions]) => {
-        const row = document.createElement('div');
-        row.style.marginBottom = '6px';
-        const label = document.createElement('div');
-        label.className = 'tiny muted';
-        label.textContent = pos;
-        row.appendChild(label);
-        (suggestions || []).slice(0, 3).forEach(s => {
-          const chip = document.createElement('span');
-          chip.className = 'suggestion-chip';
-          chip.textContent = `${s.name} (${s.adjusted_ovr.toFixed(1)})`;
-          chip.onclick = () => assignToSlot(pos, s.id);
-          row.appendChild(chip);
-        });
-        suggestionEl.appendChild(row);
-      });
+      // chemistry suggestion
+      if (data.chemistry_suggestion) {
+        const cs = data.chemistry_suggestion;
+        const div = document.createElement('div');
+        div.className = 'small';
+        div.style.marginBottom = '8px';
+        div.innerHTML = `<b style="color:var(--accent-rose)">Chemistry Tip:</b> Swap ${playerMap.get(String(cs.replace_player_id))?.Name || 'Player'} with <b style="color:var(--accent-cyan)">${cs.suggested_name}</b> for better fit.`;
+        suggestionEl.appendChild(div);
+      }
+
+      // Slot suggestions
+      const list = document.createElement('div');
+      list.className = 'tiny muted';
+      list.textContent = 'Fit penalties applied for out-of-position players.';
+      suggestionEl.appendChild(list);
     }
-    updatePitchAssignments();
+
+    // Update visuals with fit info?
+    // We could color code the slots based on `data.slots[i].fit` ("Natural fit", "Off line")
+    data.slots.forEach(slot => {
+      // Find the DOM element
+      // slot.position is our unique key e.g. "CB_8"
+      const el = document.querySelector(`.pitch-slot[data-key="${slot.position}"]`);
+      if (el && slot.player_id) {
+        if (slot.penalty < 0) {
+          el.style.borderColor = 'var(--accent-rose)';
+          el.title = `Penalty: ${slot.penalty} (${slot.fit})`;
+        } else {
+          el.style.borderColor = 'var(--accent-cyan)';
+          el.title = 'Perfect Fit';
+        }
+      }
+    });
+
   } catch (err) {
-    const suggestionEl = document.getElementById('formationSuggestions');
-    if (suggestionEl) suggestionEl.textContent = err.message;
+    console.error(err);
+    document.getElementById('formationSuggestions').textContent = 'Analysis failed: ' + err.message;
+  } finally {
+    if (btn) btn.textContent = 'Analyze Formation';
   }
 }
 

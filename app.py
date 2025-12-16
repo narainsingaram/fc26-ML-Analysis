@@ -5,9 +5,12 @@ import json
 import sys
 from functools import lru_cache
 from pathlib import Path
+import hashlib
+import io
+from datetime import datetime
 
 import numpy as np
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, send_file
 import joblib
 import pandas as pd
 
@@ -22,9 +25,6 @@ from rating_engine.features import clean_dataframe, map_position_group, parse_al
 from rating_engine.similarity import build_similarity_index  # noqa: E402
 from rating_engine.torch_predict import load_torch_predictor  # noqa: E402
 from rating_engine.quantile_tf import load_quantile_predictor  # noqa: E402
-import json
-import json
-import numpy as np
 
 app = Flask(__name__, static_folder="frontend", static_url_path="")
 
@@ -111,6 +111,20 @@ def get_model_meta():
         except Exception:
             payload.setdefault("leaderboard_error", "could not read model_leaderboard.json")
     return payload
+
+
+def get_model_hash() -> str:
+    model_path = Path("artifacts/model.joblib")
+    if not model_path.exists():
+        return "unavailable"
+    h = hashlib.sha256()
+    with model_path.open("rb") as f:
+        while True:
+            chunk = f.read(8192)
+            if not chunk:
+                break
+            h.update(chunk)
+    return h.hexdigest()[:12]
 
 
 @lru_cache()
@@ -638,6 +652,126 @@ def formation_analyze():
             "suggestions": suggestions,
         }
     )
+
+
+def _load_bias_snapshots(max_rows: int = 3):
+    bias_dir = Path("artifacts/bias")
+    snapshots = {}
+    if not bias_dir.exists():
+        return snapshots
+    for csv_path in bias_dir.glob("*_bias.csv"):
+        try:
+            df = pd.read_csv(csv_path).head(max_rows)
+            snapshots[csv_path.stem] = df.to_dict(orient="records")
+        except Exception:
+            continue
+    return snapshots
+
+
+def _draw_bar_chart(c, x, y, width, label, value, max_val, color):
+    bar_width = (value / max_val) * width if max_val else 0
+    c.setFillColor(color)
+    c.rect(x, y, bar_width, 12, fill=1, stroke=0)
+    c.setFillColorRGB(1, 1, 1)
+    c.setFont("Helvetica", 8)
+    c.drawString(x, y + 2, f"{label}")
+    c.drawRightString(x + width, y + 2, f"{value:.3f}")
+
+
+@app.route("/api/report/comparison")
+def report_comparison():
+    try:
+        player_a_id = int(request.args.get("player_a_id", ""))
+        player_b_id = int(request.args.get("player_b_id", ""))
+    except ValueError:
+        return jsonify({"error": "player_a_id and player_b_id must be integers"}), 400
+
+    try:
+        result = compare_players(
+            player_a_id=player_a_id,
+            player_b_id=player_b_id,
+            model=get_model(),
+            config=get_config(),
+            raw_df=get_data(),
+        )
+    except KeyError as exc:
+        return jsonify({"error": str(exc)}), 404
+    except Exception as exc:  # pylint: disable=broad-except
+        return jsonify({"error": str(exc)}), 500
+
+    raw_df = get_data()
+    row_a = raw_df[raw_df["ID"] == player_a_id].iloc[0]
+    row_b = raw_df[raw_df["ID"] == player_b_id].iloc[0]
+    meta = get_model_meta()
+    bias_snaps = _load_bias_snapshots()
+
+    buffer = io.BytesIO()
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.colors import Color
+    from reportlab.pdfgen import canvas
+
+    c = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+
+    # Header
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(40, height - 40, "FC26 Model Report: Player Comparison")
+    c.setFont("Helvetica", 9)
+    c.drawString(40, height - 56, f"Generated: {datetime.utcnow().isoformat()}Z")
+    c.drawString(300, height - 56, f"Model: {meta.get('best_model', 'unknown')}  |  Hash: {get_model_hash()}")
+
+    # Player overview
+    y = height - 90
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(40, y, f"Anchor: {result.player_a_name} (Pred {result.pred_a:.2f}, OVR {row_a.get('OVR', '—')})")
+    c.drawString(40, y - 16, f"Challenger: {result.player_b_name} (Pred {result.pred_b:.2f}, OVR {row_b.get('OVR', '—')})")
+    c.drawString(40, y - 32, f"Delta: {result.delta:+.2f}")
+
+    # Top drivers chart
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(40, y - 56, "Drivers (SHAP)")
+    top_reasons = result.top_reasons[:8]
+    max_abs = max((abs(r["impact"]) for r in top_reasons), default=1)
+    bar_y = y - 72
+    for r in top_reasons:
+        color = Color(0.13, 0.83, 0.73) if r["impact"] >= 0 else Color(0.96, 0.35, 0.51)
+        _draw_bar_chart(c, 40, bar_y, 240, r["feature"], r["impact"], max_abs, color)
+        bar_y -= 16
+
+    # What-if
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(320, y - 56, "What-If Scenario")
+    c.setFont("Helvetica", 9)
+    if result.what_if:
+        text = result.what_if[0]["description"]
+        c.drawString(320, y - 72, text[:80])
+        c.drawString(320, y - 86, text[80:160])
+    else:
+        c.drawString(320, y - 72, "Not available.")
+
+    # Bias snapshot
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(320, y - 110, "Bias Snapshots")
+    bias_y = y - 126
+    if bias_snaps:
+        for name, rows in list(bias_snaps.items())[:3]:
+            c.setFont("Helvetica-Bold", 9)
+            c.drawString(320, bias_y, name.replace("_bias", "").title())
+            bias_y -= 12
+            c.setFont("Helvetica", 8)
+            for row in rows:
+                c.drawString(320, bias_y, f"{row.get('group')}: MAE {row.get('mae'):.3f} | Count {row.get('count')}")
+                bias_y -= 10
+            bias_y -= 6
+    else:
+        c.setFont("Helvetica", 9)
+        c.drawString(320, bias_y, "No bias reports found.")
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    filename = f"report_{player_a_id}_vs_{player_b_id}.pdf"
+    return send_file(buffer, as_attachment=True, download_name=filename, mimetype="application/pdf")
 
 
 @app.route("/api/predict")

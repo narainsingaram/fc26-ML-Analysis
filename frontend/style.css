@@ -293,9 +293,19 @@ main {
   transform: translateY(-2px);
 }
 
+.pitch-slot>* {
+  pointer-events: none;
+}
+
 .pitch-slot.assigned {
   border-style: solid;
   background: rgba(34, 211, 238, 0.08);
+  pointer-events: auto;
+  /* Allow clicking assigned slots */
+}
+
+.pitch-slot.assigned>* {
+  pointer-events: none;
 }
 
 .slot-pos {
@@ -534,6 +544,11 @@ input[type="range"] {
   text-align: center;
   position: relative;
   overflow: hidden;
+  user-select: none;
+  /* Prevent text selection */
+  -webkit-user-select: none;
+  touch-action: none;
+  /* potentially help with touch/trackpad */
 }
 
 .hero-card.winner {

@@ -153,12 +153,14 @@
 
         <div id="selectedChips"
           style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; min-height: 32px;"></div>
-        <div class="muted tiny" style="margin-bottom: 0.75rem;">Pick players, then drag these chips onto the pitch.</div>
+        <div class="muted tiny" style="margin-bottom: 0.75rem;">Pick players, then drag these chips onto the pitch.
+        </div>
 
         <div id="playerList"></div>
 
         <div style="margin-top: 1.5rem;">
           <button class="btn" id="compareBtn" style="width: 100%;">Analyze Selection</button>
+          <button class="btn secondary" id="downloadReportBtn" style="width: 100%; margin-top: 0.5rem;">Download PDF Report</button>
           <div class="error" id="error" style="color: var(--negative); font-size: 0.875rem; margin-top: 0.5rem;"></div>
         </div>
       </div>
@@ -218,45 +220,6 @@
       </div>
     </div>
 
-    <!-- Formation Lab -->
-    <div class="card formation-lab">
-      <div class="formation-header">
-        <div>
-          <div class="tiny muted">Formation Lab</div>
-          <h3 style="margin: 0.2rem 0;">Interactive Builder</h3>
-          <div class="muted small">Drag players onto the pitch. Powered by model predictions and similarity chemistry.
-          </div>
-        </div>
-        <div class="formation-controls">
-          <div>
-            <label class="tiny muted">Formation</label>
-            <select id="formationSelect">
-              <option value="433">4-3-3</option>
-              <option value="442">4-4-2</option>
-              <option value="352">3-5-2</option>
-            </select>
-          </div>
-          <button class="btn secondary" id="clearFormation">Clear</button>
-          <button class="btn" id="analyzeFormation">Analyze Formation</button>
-        </div>
-      </div>
-
-      <div class="formation-body">
-        <div class="pitch" id="pitch"></div>
-        <div class="formation-sidebar">
-          <div class="mini-metric">
-            <div class="tiny muted">Team Strength</div>
-            <div class="value" id="teamStrength">—</div>
-          </div>
-          <div class="mini-metric">
-            <div class="tiny muted">Chemistry</div>
-            <div class="value" id="chemistryScore">—</div>
-            <div class="muted tiny" id="chemistryHint"></div>
-          </div>
-          <div id="formationSuggestions" class="muted small">Drop players to get AI-backed fit scores.</div>
-        </div>
-      </div>
-    </div>
 
     <!-- Tier 2: Drivers & Quantiles -->
     <div class="grid">
@@ -270,6 +233,91 @@
         <h3 style="margin-bottom: 0.25rem;">Risk Profile & Upside</h3>
         <div class="muted small" style="margin-bottom: 1rem;">Prediction Uncertainty (Bell Curve)</div>
         <div id="riskChart" style="width: 100%; height: 320px;"></div>
+      </div>
+    </div>
+
+    <!-- Squad Builder Section -->
+    <div class="card col-span-12" id="squadBuilderSection">
+      <div class="formation-header" style="margin-bottom: 1.5rem;">
+        <div>
+          <h2>Interactive Squad Builder</h2>
+          <div class="muted small">Select players from list above, drag them into the draft pool, then place on pitch.
+          </div>
+        </div>
+        <div class="formation-controls">
+          <select id="formationSelect" style="width:140px;">
+            <option value="433">4-3-3</option>
+            <option value="442">4-4-2</option>
+            <option value="4231">4-2-3-1</option>
+            <option value="352">3-5-2</option>
+          </select>
+          <button class="btn" id="analyzeFormation">Analyze Formation</button>
+          <button class="btn secondary" id="clearFormation">Clear Pitch</button>
+        </div>
+      </div>
+
+      <!-- Embedded Search -->
+      <div style="margin-bottom: 1rem; position: relative; max-width: 400px;">
+        <input type="text" id="squadSearch" placeholder="Search to add players (e.g. Mbappe)..."
+          style="width: 100%; padding: 0.75rem; border-radius: var(--radius-md); border: 1px solid var(--panel-border); background: rgba(0,0,0,0.2); color: #fff;">
+        <div id="squadSearchResults" class="squad-search-dropdown" style="
+             display: none;
+             position: absolute;
+             top: 100%;
+             left: 0;
+             right: 0;
+             background: var(--card-bg);
+             border: 1px solid var(--panel-border);
+             border-radius: var(--radius-md);
+             max-height: 300px;
+             overflow-y: auto;
+             z-index: 50;
+             box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+             backdrop-filter: blur(10px);
+          "></div>
+      </div>
+
+      <h4 class="muted tiny" style="margin-bottom:0.5rem;">DRAFT POOL (SELECTED PLAYERS)</h4>
+      <div id="draftPool" style="
+          display:flex;
+          gap:1rem;
+          overflow-x:auto;
+          padding: 1rem;
+          background: rgba(255,255,255,0.03);
+          border: 1px dashed var(--panel-border);
+          border-radius: var(--radius-md);
+          min-height: 140px;
+          margin-bottom: 1.5rem;
+          align-items: center;
+       ">
+        <div class="muted small">Select players above to populate draft pool.</div>
+      </div>
+
+      <div class="formation-body">
+        <!-- The Pitch -->
+        <div class="pitch" id="pitch">
+          <!-- Slots injected by JS -->
+        </div>
+
+        <!-- Sidebar Analysis -->
+        <div class="formation-sidebar">
+          <div class="mini-metric">
+            <div class="tiny muted">Team Strength</div>
+            <div style="font-size:1.5rem; font-weight:800;" id="teamStrength">—</div>
+          </div>
+          <div class="mini-metric">
+            <div class="tiny muted">Chemistry Score</div>
+            <div style="font-size:1.5rem; font-weight:800;" id="chemistryScore">—</div>
+            <div class="tiny muted" id="chemistryHint" style="margin-top:4px; color:var(--accent-rose);"></div>
+          </div>
+          <div class="mini-metric" style="flex:1;">
+            <div class="tiny muted">AI Suggestions</div>
+            <div id="formationSuggestions" class="small"
+              style="margin-top:8px; line-height:1.5; color:var(--text-secondary);">
+              Analyze formation to get fit checks and replacement suggestions.
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
