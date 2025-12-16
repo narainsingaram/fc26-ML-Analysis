@@ -515,23 +515,23 @@ function renderDriversChart(topReasons, delta) {
     xAxis: {
       type: 'value',
       axisLabel: { color: cssVar('--text-secondary'), fontSize: 11 },
-      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } },
+      splitLine: { lineStyle: { color: 'rgba(0,0,0,0.05)' } },
       axisLine: { show: false },
       axisTick: { show: false }
     },
     yAxis: {
       type: 'category',
       data: names,
-      axisLabel: { color: cssVar('--text-primary'), fontWeight: 600, fontSize: 12 },
+      axisLabel: { color: cssVar('--text-primary'), fontWeight: 600, fontSize: 12, fontFamily: 'Outfit' },
       axisLine: { show: false },
       axisTick: { show: false },
       inverse: true
     },
     tooltip: {
       trigger: 'axis',
-      backgroundColor: 'rgba(20,20,20,0.95)',
+      backgroundColor: 'rgba(255,255,255,0.95)',
       borderColor: cssVar('--panel-border'),
-      textStyle: { color: '#fff' },
+      textStyle: { color: '#0f172a' },
       formatter: (params) => {
         const p = params[0];
         const idx = p.dataIndex;
@@ -543,8 +543,8 @@ function renderDriversChart(topReasons, delta) {
           <div style="font-weight:700; margin-bottom:4px;">${p.name}</div>
           <div style="font-size:12px; color:#a1a1aa;">
             Impact: <span style="color:${p.value > 0 ? cssVar('--positive') : cssVar('--negative')}">${p.value > 0 ? '+' : ''}${p.value.toFixed(3)}</span><br/>
-            Stat Delta: <span style="color:#fff;">${stat ?? '—'}</span><br/>
-            Contrib: <span style="color:#fff;">${pct}</span>
+            Stat Delta: <span style="color:#0f172a;">${stat ?? '—'}</span><br/>
+            Contrib: <span style="color:#0f172a;">${pct}</span>
           </div>`;
       }
     },
@@ -554,10 +554,10 @@ function renderDriversChart(topReasons, delta) {
         value: v,
         itemStyle: {
           color: v >= 0
-            ? new echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: 'rgba(34, 211, 238, 0.6)' }, { offset: 1, color: 'rgba(34, 211, 238, 1)' }])
-            : new echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: 'rgba(251, 113, 133, 0.6)' }, { offset: 1, color: 'rgba(251, 113, 133, 1)' }]),
+            ? new echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: 'rgba(16, 185, 129, 0.6)' }, { offset: 1, color: 'rgba(16, 185, 129, 1)' }])
+            : new echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: 'rgba(244, 63, 94, 0.6)' }, { offset: 1, color: 'rgba(244, 63, 94, 1)' }]),
           shadowBlur: 10,
-          shadowColor: v >= 0 ? 'rgba(34, 211, 238, 0.3)' : 'rgba(251, 113, 133, 0.3)'
+          shadowColor: v >= 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(244, 63, 94, 0.2)'
         }
       })),
       label: {
@@ -571,7 +571,7 @@ function renderDriversChart(topReasons, delta) {
       barWidth: 16,
       itemStyle: { borderRadius: 4 },
       showBackground: true,
-      backgroundStyle: { color: 'rgba(255,255,255,0.02)', borderRadius: 4 }
+      backgroundStyle: { color: 'rgba(0,0,0,0.03)', borderRadius: 4 }
     }]
   });
   window.addEventListener('resize', () => chart.resize());
@@ -730,16 +730,16 @@ function renderAnomalyScatter(data) {
     grid: { left: 40, right: 30, top: 20, bottom: 40 },
     tooltip: {
       trigger: 'item',
-      backgroundColor: 'rgba(20,20,20,0.95)',
-      borderColor: '#333',
-      textStyle: { color: '#fff' },
+      backgroundColor: 'rgba(255,255,255,0.95)',
+      borderColor: '#e2e8f0',
+      textStyle: { color: '#0f172a' },
       formatter: (p) => {
         const d = p.data;
         const res = d.residual;
         return `
              <div style="font-weight:700; margin-bottom:4px;">${d.name}</div>
-             <div class="small" style="color:#cbd5e1;">Predicted: <b style="color:#fff">${d.value[0].toFixed(1)}</b></div>
-             <div class="small" style="color:#cbd5e1;">Actual: <b style="color:#fff">${d.value[1].toFixed(1)}</b></div>
+             <div class="small" style="color:#64748b;">Predicted: <b style="color:#0f172a">${d.value[0].toFixed(1)}</b></div>
+             <div class="small" style="color:#64748b;">Actual: <b style="color:#0f172a">${d.value[1].toFixed(1)}</b></div>
              <div class="small" style="margin-top:4px; color:${res >= 0 ? cssVar('--positive') : cssVar('--negative')}">
                 Residual: ${res > 0 ? '+' : ''}${res.toFixed(2)}
              </div>
@@ -753,8 +753,8 @@ function renderAnomalyScatter(data) {
       min: minVal,
       max: maxVal,
       axisLabel: { color: cssVar('--text-secondary') },
-      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } },
-      axisLine: { lineStyle: { color: '#52525b' } }
+      splitLine: { lineStyle: { color: 'rgba(0,0,0,0.05)' } },
+      axisLine: { lineStyle: { color: '#cbd5e1' } }
     },
     yAxis: {
       name: 'Actual OVR',
@@ -763,15 +763,15 @@ function renderAnomalyScatter(data) {
       min: minVal,
       max: maxVal,
       axisLabel: { color: cssVar('--text-secondary') },
-      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } },
-      axisLine: { lineStyle: { color: '#52525b' } }
+      splitLine: { lineStyle: { color: 'rgba(0,0,0,0.05)' } },
+      axisLine: { lineStyle: { color: '#cbd5e1' } }
     },
     series: [
       {
         type: 'line',
         data: [[minVal, minVal], [maxVal, maxVal]],
         showSymbol: false,
-        lineStyle: { width: 1, type: 'dashed', color: 'rgba(255,255,255,0.3)' },
+        lineStyle: { width: 1, type: 'dashed', color: 'rgba(0,0,0,0.2)' },
         silent: true,
         z: 1
       },
@@ -788,8 +788,8 @@ function renderAnomalyScatter(data) {
             return '#94a3b8'; // Slate/Gray
           },
           shadowBlur: 8,
-          shadowColor: 'rgba(0,0,0,0.4)',
-          borderColor: 'rgba(255,255,255,0.2)',
+          shadowColor: 'rgba(0,0,0,0.1)',
+          borderColor: 'rgba(255,255,255,1)',
           borderWidth: 1
         },
         emphasis: {
@@ -797,7 +797,7 @@ function renderAnomalyScatter(data) {
           scale: true,
           itemStyle: {
             shadowBlur: 20,
-            borderColor: '#fff',
+            borderColor: '#3b82f6',
             borderWidth: 2
           }
         },
@@ -961,8 +961,8 @@ async function fetchQuantiles(playerId) {
             <span>${p90.toFixed(1)}</span>
           </div>
         </div>
-        <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px;">
-          <div style="font-weight:700; margin-bottom:4px; font-size: 0.9em; color: var(--text-primary);">Analysis</div>
+        <div style="background: var(--bg-surface); padding: 12px; border-radius: 8px; border: 1px solid var(--panel-border);">
+          <div style="font-weight:700; margin-bottom:4px; font-size: 0.9em; color: var(--text-main);">Analysis</div>
           <div class="muted small" style="line-height:1.5;">
             ${variability} • Range: ${spread.toFixed(2)} pts<br/>
             ${skewLabel} • Volatility: ${volPct.toFixed(1)}%
@@ -1018,8 +1018,8 @@ function renderRiskProfile(data) {
     yAxis: { type: 'value', show: false },
     tooltip: {
       trigger: 'axis',
-      backgroundColor: 'rgba(20,20,20,0.9)',
-      textStyle: { color: '#fff' },
+      backgroundColor: 'rgba(255,255,255,0.95)',
+      textStyle: { color: '#0f172a' },
       formatter: (params) => {
         const x = params[0].value[0];
         return `OVR ${x.toFixed(1)}`;
@@ -1042,9 +1042,9 @@ function renderRiskProfile(data) {
           symbol: 'none',
           label: { position: 'end', color: '#fff', formatter: '{b}' },
           data: [
-            { xAxis: p10, lineStyle: { color: cssVar('--negative'), type: 'dashed' }, label: { formatter: 'Floor\n' + p10.toFixed(0) } },
-            { xAxis: p50, lineStyle: { color: cssVar('--text-primary'), type: 'solid' }, label: { formatter: 'Pred\n' + p50.toFixed(0) } },
-            { xAxis: p90, lineStyle: { color: cssVar('--positive'), type: 'dashed' }, label: { formatter: 'Ceiling\n' + p90.toFixed(0) } }
+            { xAxis: p10, lineStyle: { color: cssVar('--negative'), type: 'dashed' }, label: { color: '#64748b', formatter: 'Floor\n' + p10.toFixed(0) } },
+            { xAxis: p50, lineStyle: { color: cssVar('--text-main'), type: 'solid' }, label: { color: '#0f172a', formatter: 'Pred\n' + p50.toFixed(0) } },
+            { xAxis: p90, lineStyle: { color: cssVar('--positive'), type: 'dashed' }, label: { color: '#64748b', formatter: 'Ceiling\n' + p90.toFixed(0) } }
           ]
         }
       }
@@ -1093,7 +1093,7 @@ function renderComposition(reasons, playerName) {
 
   chart.setOption({
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'item', backgroundColor: 'rgba(20,20,20,0.9)', textStyle: { color: '#fff' } },
+    tooltip: { trigger: 'item', backgroundColor: 'rgba(255,255,255,0.95)', textStyle: { color: '#0f172a' } },
     legend: { bottom: 0, textStyle: { color: cssVar('--text-secondary') }, icon: 'circle' },
     series: [
       {
@@ -1103,7 +1103,7 @@ function renderComposition(reasons, playerName) {
         center: ['50%', '45%'],
         itemStyle: {
           borderRadius: 5,
-          borderColor: '#18181b',
+          borderColor: '#fff',
           borderWidth: 2
         },
         label: { show: false },
@@ -1151,22 +1151,22 @@ function renderNetwork(similarResults, playerA) {
     symbolSize: 60,
     itemStyle: {
       color: new echarts.graphic.RadialGradient(0.5, 0.5, 0.5, [
-        { offset: 0, color: '#10b981' },
-        { offset: 1, color: '#047857' }
+        { offset: 0, color: '#3b82f6' },
+        { offset: 1, color: '#1d4ed8' }
       ]),
-      borderColor: '#ecfdf5',
+      borderColor: '#dbeafe',
       borderWidth: 3,
       shadowBlur: 20,
-      shadowColor: 'rgba(16, 185, 129, 0.5)'
+      shadowColor: 'rgba(59, 130, 246, 0.5)'
     },
-    label: { show: true, color: '#fff', fontWeight: 800, fontSize: 14, textShadowBlur: 4, textShadowColor: '#000' },
+    label: { show: true, color: '#fff', fontWeight: 800, fontSize: 14 },
   }];
 
   const edges = [];
   similarResults.forEach((s, idx) => {
     const score = norm(s.similarity || 0);
     const size = 25 + score * 25;
-    const color = score > 0.6 ? '#22d3ee' : '#a78bfa'; // Cyan for high match, Violet for lower
+    const color = score > 0.6 ? '#6366f1' : '#a78bfa'; // Indigo/Purple
 
     nodes.push({
       id: String(s.id || idx),
@@ -1202,7 +1202,7 @@ function renderNetwork(similarResults, playerA) {
         color: {
           type: 'linear',
           x: 0, y: 0, x2: 1, y2: 0,
-          colorStops: [{ offset: 0, color: '#10b981' }, { offset: 1, color: color }],
+          colorStops: [{ offset: 0, color: '#3b82f6' }, { offset: 1, color: color }],
         },
         curveness: 0.15
       },
@@ -1214,7 +1214,7 @@ function renderNetwork(similarResults, playerA) {
     backgroundColor: 'transparent',
     animationDurationUpdate: 1500,
     animationEasingUpdate: 'quinticInOut',
-    tooltip: { backgroundColor: 'rgba(20,20,20,0.9)', textStyle: { color: '#fff' }, borderColor: '#333' },
+    tooltip: { backgroundColor: 'rgba(255,255,255,0.95)', textStyle: { color: '#0f172a' }, borderColor: '#e2e8f0' },
     series: [{
       type: 'graph',
       layout: 'force',
@@ -1300,14 +1300,14 @@ function renderRadar(topReasons, nameA, nameB) {
       splitArea: {
         show: true,
         areaStyle: {
-          color: ['rgba(255,255,255,0.01)', 'rgba(255,255,255,0.03)']
+          color: ['rgba(59,130,246,0.01)', 'rgba(59,130,246,0.03)']
         }
       },
-      axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
-      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } },
+      axisLine: { lineStyle: { color: 'rgba(0,0,0,0.1)' } },
+      splitLine: { lineStyle: { color: 'rgba(0,0,0,0.05)' } },
       axisName: {
         color: cssVar('--text-secondary'),
-        backgroundColor: 'rgba(0,0,0,0.3)',
+        backgroundColor: 'rgba(255,255,255,0.8)',
         borderRadius: 4,
         padding: [4, 6]
       },
@@ -1326,25 +1326,25 @@ function renderRadar(topReasons, nameA, nameB) {
           {
             value: valsA,
             name: nameA || 'Player A',
-            itemStyle: { color: '#10b981' },
-            lineStyle: { width: 3, color: '#10b981', shadowBlur: 10, shadowColor: 'rgba(16, 185, 129, 0.5)' },
-            areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(16, 185, 129, 0.4)' }, { offset: 1, color: 'rgba(16, 185, 129, 0.05)' }]) },
+            itemStyle: { color: '#3b82f6' },
+            lineStyle: { width: 3, color: '#3b82f6', shadowBlur: 10, shadowColor: 'rgba(59, 130, 246, 0.4)' },
+            areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(59, 130, 246, 0.4)' }, { offset: 1, color: 'rgba(59, 130, 246, 0.05)' }]) },
             symbol: 'circle',
             symbolSize: 6
           },
           {
             value: valsB,
             name: nameB || 'Player B',
-            itemStyle: { color: '#22d3ee' },
-            lineStyle: { width: 3, color: '#22d3ee', shadowBlur: 10, shadowColor: 'rgba(34, 211, 238, 0.5)' },
-            areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(34, 211, 238, 0.4)' }, { offset: 1, color: 'rgba(34, 211, 238, 0.05)' }]) },
+            itemStyle: { color: '#8b5cf6' },
+            lineStyle: { width: 3, color: '#8b5cf6', shadowBlur: 10, shadowColor: 'rgba(139, 92, 246, 0.4)' },
+            areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(139, 92, 246, 0.4)' }, { offset: 1, color: 'rgba(139, 92, 246, 0.05)' }]) },
             symbol: 'circle',
             symbolSize: 6
           }
         ]
       },
     ],
-    tooltip: { trigger: 'item', backgroundColor: 'rgba(20,20,20,0.9)', textStyle: { color: '#fff' } },
+    tooltip: { trigger: 'item', backgroundColor: 'rgba(255,255,255,0.95)', textStyle: { color: '#0f172a' } },
   });
   window.addEventListener('resize', () => chart.resize());
 }
